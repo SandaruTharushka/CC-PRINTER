@@ -1,0 +1,91 @@
+{
+  "name": "barcode-label-generator",
+  "productName": "Barcode & Label Generator",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Barcode and Label Generator Desktop App",
+  "main": "electron/main.js",
+  "type": "commonjs",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "electron:dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && npx cross-env NODE_ENV=development electron .\"",
+    "electron:build": "vite build && electron-builder",
+    "electron:build:win": "vite build && electron-builder --win",
+    "electron:build:mac": "vite build && electron-builder --mac",
+    "electron:build:linux": "vite build && electron-builder --linux"
+  },
+  "build": {
+    "appId": "com.barcode.labelgenerator",
+    "productName": "Barcode & Label Generator",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "electron/icon.ico"
+    },
+    "mac": {
+      "target": "dmg",
+      "icon": "electron/icon.icns"
+    },
+    "linux": {
+      "target": "AppImage",
+      "icon": "electron/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Barcode & Label Generator"
+    }
+  },
+  "dependencies": {
+    "@types/qrcode": "^1.5.6",
+    "clsx": "2.1.1",
+    "jsbarcode": "^3.12.3",
+    "lucide-react": "^1.14.0",
+    "qrcode": "^1.5.4",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "react-to-print": "^3.3.0",
+    "recharts": "^3.8.1",
+    "tailwind-merge": "3.4.0",
+    "zustand": "^5.0.12"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "4.1.17",
+    "@types/node": "22.19.17",
+    "@types/react": "19.2.7",
+    "@types/react-dom": "19.2.3",
+    "@vitejs/plugin-react": "5.1.1",
+    "concurrently": "^9.0.0",
+    "cross-env": "^10.1.0",
+    "electron": "^36.0.0",
+    "electron-builder": "^26.0.0",
+    "tailwindcss": "4.1.17",
+    "typescript": "5.9.3",
+    "vite": "7.3.2",
+    "vite-plugin-singlefile": "2.3.0",
+    "wait-on": "^8.0.0"
+  }
+}
