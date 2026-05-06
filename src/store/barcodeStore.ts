@@ -214,8 +214,8 @@ const DEFAULT_SETTINGS: LabelSettings = {
   marginLeftMm: 0,
   xOffsetMm: 0,
   yOffsetMm: 0,
-  barcodeWidthMm: 0,
-  barcodeHeightMm: 0,
+  barcodeWidthMm: 44,
+  barcodeHeightMm: 10.5,
   barcodeRotate: 0,
   barcode_alignment: 'center',
   printDpi: 203,
@@ -308,7 +308,7 @@ function loadSettings(): LabelSettings {
       barcodeAlignment === 'left' || barcodeAlignment === 'right' || barcodeAlignment === 'center'
         ? barcodeAlignment
         : 'center';
-    return {
+    const merged = {
       ...DEFAULT_SETTINGS,
       ...raw,
       barcode_alignment: safeBarcodeAlignment,
@@ -317,8 +317,39 @@ function loadSettings(): LabelSettings {
         ...(raw.label_template ?? {}),
       },
     };
+    return sanitizeLabelSettings(merged);
   }
-  return DEFAULT_SETTINGS;
+  return sanitizeLabelSettings(DEFAULT_SETTINGS);
+}
+
+function sanitizeLabelSettings(settings: LabelSettings): LabelSettings {
+  return {
+    ...settings,
+    label_width_mm: Math.max(20, Math.min(300, settings.label_width_mm || DEFAULT_SETTINGS.label_width_mm)),
+    label_height_mm: Math.max(10, Math.min(300, settings.label_height_mm || DEFAULT_SETTINGS.label_height_mm)),
+    label_gap_mm: Math.max(0, Math.min(50, settings.label_gap_mm ?? DEFAULT_SETTINGS.label_gap_mm)),
+    label_font_size: Math.max(6, settings.label_font_size || DEFAULT_SETTINGS.label_font_size),
+    columns: Math.max(1, Math.min(20, Math.round(settings.columns || DEFAULT_SETTINGS.columns))),
+    rows: Math.max(1, Math.min(20, Math.round(settings.rows || DEFAULT_SETTINGS.rows))),
+    barcodeWidthMm: Math.max(1, settings.barcodeWidthMm || DEFAULT_SETTINGS.barcodeWidthMm),
+    barcodeHeightMm: Math.max(1, settings.barcodeHeightMm || DEFAULT_SETTINGS.barcodeHeightMm),
+    barcodeModuleWidth: Math.max(0.2, settings.barcodeModuleWidth || DEFAULT_SETTINGS.barcodeModuleWidth),
+    label_template: {
+      ...settings.label_template,
+      labelWidthMm: Math.max(20, settings.label_template.labelWidthMm || settings.label_width_mm),
+      labelHeightMm: Math.max(10, settings.label_template.labelHeightMm || settings.label_height_mm),
+      productName: { ...settings.label_template.productName, fontSizePx: Math.max(6, settings.label_template.productName.fontSizePx || 8) },
+      supplier: { ...settings.label_template.supplier, fontSizePx: Math.max(6, settings.label_template.supplier.fontSizePx || 6) },
+      encryptedPrice: { ...settings.label_template.encryptedPrice, fontSizePx: Math.max(6, settings.label_template.encryptedPrice.fontSizePx || 7) },
+      barcodeNumber: { ...settings.label_template.barcodeNumber, fontSizePx: Math.max(6, settings.label_template.barcodeNumber.fontSizePx || 7) },
+      normalPrice: { ...settings.label_template.normalPrice, fontSizePx: Math.max(6, settings.label_template.normalPrice.fontSizePx || 7) },
+      barcode: {
+        ...settings.label_template.barcode,
+        widthMm: Math.max(1, settings.label_template.barcode.widthMm || DEFAULT_SETTINGS.label_template.barcode.widthMm),
+        heightMm: Math.max(1, settings.label_template.barcode.heightMm || DEFAULT_SETTINGS.label_template.barcode.heightMm),
+      },
+    },
+  };
 }
 
 function loadHistory(): GeneratedLabel[] {
@@ -428,7 +459,7 @@ export const useBarcodeStore = create<BarcodeStore>((set, get) => ({
       settings = { ...settings, rows: Math.max(1, Math.min(20, Math.round(settings.rows))) };
     }
     const current = get().labelSettings;
-    const merged = { ...current, ...settings };
+    const merged = sanitizeLabelSettings({ ...current, ...settings });
     // Auto-sync label_template dimensions when label size changes
     const widthChanged = settings.label_width_mm !== undefined && settings.label_width_mm !== current.label_width_mm;
     const heightChanged = settings.label_height_mm !== undefined && settings.label_height_mm !== current.label_height_mm;
