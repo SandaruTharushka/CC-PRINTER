@@ -22,6 +22,7 @@ export interface LabelTemplateSettings {
   labelWidthMm: number;
   labelHeightMm: number;
   productName: LabelElementSettings;
+  supplier: LabelElementSettings;
   encryptedPrice: LabelElementSettings;
   barcode: {
     visible: boolean;
@@ -49,6 +50,7 @@ export interface Product {
   stock: number;
   description?: string;
   rackNo?: string;
+  supplier?: string;
 }
 
 export interface PrinterInfo {
@@ -68,6 +70,7 @@ export interface LabelSettings {
   label_font_size: number;
   label_show_price: boolean;
   label_show_product_name: boolean;
+  label_show_supplier: boolean;
   label_show_barcode_text: boolean;
   label_show_qr: boolean;
   label_barcode_type: BarcodeType;
@@ -89,6 +92,7 @@ export interface LabelSettings {
   barcodeWidthMm: number;
   barcodeHeightMm: number;
   barcodeRotate: 0 | 90 | 180 | 270;
+  barcode_alignment: LabelAlign;
   printDpi: number;
   barcodeModuleWidth: number;
   debugGuides: boolean;
@@ -191,6 +195,7 @@ const DEFAULT_SETTINGS: LabelSettings = {
   label_font_size: 10,
   label_show_price: true,
   label_show_product_name: true,
+  label_show_supplier: true,
   label_show_barcode_text: true,
   label_show_qr: false,
   label_barcode_type: 'CODE128',
@@ -212,6 +217,7 @@ const DEFAULT_SETTINGS: LabelSettings = {
   barcodeWidthMm: 0,
   barcodeHeightMm: 0,
   barcodeRotate: 0,
+  barcode_alignment: 'center',
   printDpi: 203,
   barcodeModuleWidth: 1.2,
   debugGuides: false,
@@ -219,8 +225,9 @@ const DEFAULT_SETTINGS: LabelSettings = {
     labelWidthMm: 50,
     labelHeightMm: 25,
     productName: { visible: true, xMm: 1, yMm: 1, widthMm: 48, heightMm: 4, fontSizePx: 8, bold: true, align: 'center' },
-    encryptedPrice: { visible: true, xMm: 1, yMm: 5, widthMm: 48, heightMm: 3, fontSizePx: 7, bold: true, align: 'center', letterSpacingPx: 0.4 },
-    barcode: { visible: true, xMm: 3, yMm: 8, widthMm: 44, heightMm: 12, quietZoneMm: 2, type: 'CODE128', showText: true },
+    supplier: { visible: true, xMm: 1, yMm: 5, widthMm: 48, heightMm: 3, fontSizePx: 6, bold: false, align: 'center' },
+    encryptedPrice: { visible: true, xMm: 1, yMm: 8, widthMm: 48, heightMm: 3, fontSizePx: 7, bold: true, align: 'center', letterSpacingPx: 0.4 },
+    barcode: { visible: true, xMm: 3, yMm: 11, widthMm: 44, heightMm: 9, quietZoneMm: 2, type: 'CODE128', showText: true },
     barcodeNumber: { visible: true, xMm: 1, yMm: 20.5, widthMm: 48, heightMm: 3, fontSizePx: 7, align: 'center', letterSpacingPx: 0.3 },
     normalPrice: { visible: false, xMm: 1, yMm: 5, widthMm: 48, heightMm: 3, fontSizePx: 7, bold: true, align: 'center' },
     priceCodeKey: 'sfav0urite',
@@ -296,9 +303,15 @@ export const STORAGE_KEYS = [SETTINGS_KEY, HISTORY_KEY, GENERATED_BARCODES_KEY] 
 function loadSettings(): LabelSettings {
   const raw = storageReadSync<Partial<LabelSettings> | null>(SETTINGS_KEY, null);
   if (raw && typeof raw === 'object') {
+    const barcodeAlignment = raw.barcode_alignment;
+    const safeBarcodeAlignment: LabelAlign =
+      barcodeAlignment === 'left' || barcodeAlignment === 'right' || barcodeAlignment === 'center'
+        ? barcodeAlignment
+        : 'center';
     return {
       ...DEFAULT_SETTINGS,
       ...raw,
+      barcode_alignment: safeBarcodeAlignment,
       label_template: {
         ...DEFAULT_SETTINGS.label_template,
         ...(raw.label_template ?? {}),

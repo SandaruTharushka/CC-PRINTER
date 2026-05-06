@@ -22,7 +22,7 @@ export interface LabelRenderOptions {
     showGrid?: boolean;
     showElementBounds?: boolean;
     showSafeArea?: boolean;
-    selectedElement?: 'productName' | 'encryptedPrice' | 'barcode' | 'barcodeNumber' | 'normalPrice' | null;
+    selectedElement?: 'productName' | 'supplier' | 'encryptedPrice' | 'barcode' | 'barcodeNumber' | 'normalPrice' | null;
   };
 }
 
@@ -145,6 +145,9 @@ export async function renderLabel(opts: LabelRenderOptions): Promise<RenderedLab
   if (template.productName.visible && settings.label_show_product_name) {
     drawTextElement(template.productName, product.name || '', '#0f172a');
   }
+  if (template.supplier.visible && settings.label_show_supplier && product.supplier?.trim()) {
+    drawTextElement(template.supplier, product.supplier.trim(), '#475569');
+  }
 
   const effectivePrice = product.price ?? 0;
 
@@ -158,23 +161,32 @@ export async function renderLabel(opts: LabelRenderOptions): Promise<RenderedLab
   const hasQR = settings.label_show_qr && qrDataUrl;
   const barcodeAreaWidth = toPxScaled(template.barcode.widthMm);
   const barcodeAreaHeight = toPxScaled(template.barcode.heightMm);
-  const barcodeX = toPxScaled(template.barcode.xMm);
+  const barcodeContainerX = toPxScaled(template.barcode.xMm);
   const barcodeY = toPxScaled(template.barcode.yMm);
   const rotate = settings.barcodeRotate ?? 0;
+  const align = settings.barcode_alignment === 'left' || settings.barcode_alignment === 'right' ? settings.barcode_alignment : 'center';
+  const intrinsicBarcodeWidth = barcodeImg ? (barcodeAreaHeight * (barcodeImg.width / Math.max(1, barcodeImg.height))) : barcodeAreaWidth;
+  const maxBarcodeWidth = Math.max(1, barcodeAreaWidth);
+  const drawBarcodeWidth = Math.max(1, Math.min(maxBarcodeWidth, intrinsicBarcodeWidth));
+  const barcodeX = align === 'left'
+    ? barcodeContainerX
+    : align === 'right'
+      ? barcodeContainerX + (barcodeAreaWidth - drawBarcodeWidth)
+      : barcodeContainerX + (barcodeAreaWidth - drawBarcodeWidth) / 2;
 
   if (barcodeImg) {
     if (rotate === 0) {
-      ctx.drawImage(barcodeImg, barcodeX, barcodeY, barcodeAreaWidth, barcodeAreaHeight);
+      ctx.drawImage(barcodeImg, barcodeX, barcodeY, drawBarcodeWidth, barcodeAreaHeight);
     } else {
       // Rotate around barcode centre
-      const cx = barcodeX + barcodeAreaWidth / 2;
+      const cx = barcodeX + drawBarcodeWidth / 2;
       const cy = barcodeY + barcodeAreaHeight / 2;
       ctx.save();
       ctx.translate(cx, cy);
       ctx.rotate((rotate * Math.PI) / 180);
       // For 90/270 swap width/height when drawing
-      const dw = rotate === 90 || rotate === 270 ? barcodeAreaHeight : barcodeAreaWidth;
-      const dh = rotate === 90 || rotate === 270 ? barcodeAreaWidth : barcodeAreaHeight;
+      const dw = rotate === 90 || rotate === 270 ? barcodeAreaHeight : drawBarcodeWidth;
+      const dh = rotate === 90 || rotate === 270 ? drawBarcodeWidth : barcodeAreaHeight;
       ctx.drawImage(barcodeImg, -dw / 2, -dh / 2, dw, dh);
       ctx.restore();
     }
@@ -186,7 +198,7 @@ export async function renderLabel(opts: LabelRenderOptions): Promise<RenderedLab
     if (qrImg) {
       const qrSize = Math.min(barcodeAreaHeight, Math.round(widthPx * 0.28));
       const qrX = widthPx - toPxScaled(1) - qrSize;
-      const qrY = barcodeY + (barcodeAreaHeight - qrSize) / 2;
+      const qrY = barcodeY + Math.max(0, (barcodeAreaHeight - qrSize) / 2);
       ctx.drawImage(qrImg, qrX, qrY, qrSize, qrSize);
     }
   }
@@ -224,6 +236,7 @@ export async function renderLabel(opts: LabelRenderOptions): Promise<RenderedLab
       ctx.setLineDash([]);
     };
     drawBound('productName', toPxScaled(template.productName.xMm), toPxScaled(template.productName.yMm), toPxScaled(template.productName.widthMm), toPxScaled(template.productName.heightMm));
+    drawBound('supplier', toPxScaled(template.supplier.xMm), toPxScaled(template.supplier.yMm), toPxScaled(template.supplier.widthMm), toPxScaled(template.supplier.heightMm));
     drawBound('encryptedPrice', toPxScaled(template.encryptedPrice.xMm), toPxScaled(template.encryptedPrice.yMm), toPxScaled(template.encryptedPrice.widthMm), toPxScaled(template.encryptedPrice.heightMm));
     drawBound('barcode', toPxScaled(template.barcode.xMm), toPxScaled(template.barcode.yMm), toPxScaled(template.barcode.widthMm), toPxScaled(template.barcode.heightMm));
     drawBound('barcodeNumber', toPxScaled(template.barcodeNumber.xMm), toPxScaled(template.barcodeNumber.yMm), toPxScaled(template.barcodeNumber.widthMm), toPxScaled(template.barcodeNumber.heightMm));

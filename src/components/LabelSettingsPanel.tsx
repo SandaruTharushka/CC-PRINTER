@@ -18,7 +18,7 @@ export default function LabelSettingsPanel() {
   const MIN_BARCODE_MM = 1;
   const { labelSettings, setLabelSettings, settingsSaved, setSettingsSaved, selectedPrinter } = useBarcodeStore();
   const [labelSizeKey, setLabelSizeKey] = useState<LabelSize>('medium');
-  const [layoutElement, setLayoutElement] = useState<'productName' | 'encryptedPrice' | 'barcode' | 'barcodeNumber' | 'normalPrice'>('productName');
+  const [layoutElement, setLayoutElement] = useState<'productName' | 'supplier' | 'encryptedPrice' | 'barcode' | 'barcodeNumber' | 'normalPrice'>('productName');
 
   const keyValidation = validatePriceCodeKey(labelSettings.price_code_key);
   const encoded1250 = keyValidation.valid ? encodePriceToCode(1250, labelSettings.price_code_key) : '--';
@@ -30,7 +30,7 @@ export default function LabelSettingsPanel() {
   const [toastMessage, setToastMessage] = useState('');
   const [testPrintStatus, setTestPrintStatus] = useState<'idle' | 'printing' | 'done'>('idle');
 
-  const sampleProduct = useMemo(() => ({ id: 'sample', sku: 'SAMPLE-001', name: 'SAMPLE PRODUCT NAME', barcode: '201234567890', barcode_type: 'CODE128' as const, price: 1250, category: 'Sample', stock: 1 }), []);
+  const sampleProduct = useMemo(() => ({ id: 'sample', sku: 'SAMPLE-001', name: 'SAMPLE PRODUCT NAME', supplier: 'SAMPLE SUPPLIER', barcode: '201234567890', barcode_type: 'CODE128' as const, price: 1250, category: 'Sample', stock: 1 }), []);
   const sampleBarcode = useMemo(() => `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="440" height="120"><rect width="440" height="120" fill="white"/><g fill="black">${Array.from({length: 55}).map((_,i)=>`<rect x="${i*8}" y="0" width="${i%3===0?4:2}" height="90"/>`).join('')}</g><text x="220" y="112" font-size="16" text-anchor="middle">201234567890</text></svg>`)}`, []);
 
   useEffect(() => {
@@ -211,7 +211,7 @@ export default function LabelSettingsPanel() {
           <div className="col-span-2">
             <label className="text-xs font-medium text-slate-500 mb-1 block">Element</label>
             <select value={layoutElement} onChange={e => setLayoutElement(e.target.value as typeof layoutElement)} className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2">
-              <option value="productName">Product Name</option><option value="encryptedPrice">Encrypted Price</option><option value="barcode">Barcode</option><option value="barcodeNumber">Barcode Number</option><option value="normalPrice">Normal Price</option>
+              <option value="productName">Product Name</option><option value="supplier">Supplier</option><option value="encryptedPrice">Encrypted Price</option><option value="barcode">Barcode</option><option value="barcodeNumber">Barcode Number</option><option value="normalPrice">Normal Price</option>
             </select>
           </div>
           {(['xMm','yMm','widthMm','heightMm'] as const).map(k => (
@@ -347,6 +347,13 @@ export default function LabelSettingsPanel() {
               <option value={0}>0°</option><option value={90}>90°</option><option value={180}>180°</option><option value={270}>270°</option>
             </select>
           </div>
+          <div>
+            <label className="text-xs font-medium text-slate-500 mb-1 block">Barcode Alignment</label>
+            <select value={labelSettings.barcode_alignment} onChange={e => setLabelSettings({ barcode_alignment: e.target.value as 'left' | 'center' | 'right' })}
+              className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-indigo-400">
+              <option value="left">Left</option><option value="center">Center</option><option value="right">Right</option>
+            </select>
+          </div>
         </div>
       </Section>
 
@@ -357,6 +364,11 @@ export default function LabelSettingsPanel() {
             label="Show Product Name"
             checked={labelSettings.label_show_product_name}
             onChange={v => setLabelSettings({ label_show_product_name: v })}
+          />
+          <Toggle
+            label="Show Supplier"
+            checked={labelSettings.label_show_supplier}
+            onChange={v => setLabelSettings({ label_show_supplier: v })}
           />
           <Toggle
             label="Show Encrypted Price Code"

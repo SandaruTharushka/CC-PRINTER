@@ -29,6 +29,7 @@ interface FormState {
   stock: string;
   description: string;
   rackNo: string;
+  supplier: string;
 }
 
 const EMPTY_FORM: FormState = {
@@ -41,6 +42,7 @@ const EMPTY_FORM: FormState = {
   stock: '',
   description: '',
   rackNo: '',
+  supplier: '',
 };
 
 function productToForm(p: Product): FormState {
@@ -54,6 +56,7 @@ function productToForm(p: Product): FormState {
     stock: String(p.stock),
     description: p.description ?? '',
     rackNo: p.rackNo ?? '',
+    supplier: p.supplier ?? '',
   };
 }
 
@@ -172,6 +175,7 @@ export default function ItemManagementPanel() {
         stock: safeStock,
         description: form.description.trim() || undefined,
         rackNo: form.rackNo.trim() || undefined,
+        supplier: form.supplier.trim() || undefined,
       };
       const updated = addProductToDB(newProduct);
       addProduct(newProduct);
@@ -189,6 +193,7 @@ export default function ItemManagementPanel() {
         stock: safeStock,
         description: form.description.trim() || undefined,
         rackNo: form.rackNo.trim() || undefined,
+        supplier: form.supplier.trim() || undefined,
       };
       updateProductInDB(editTarget.id, updates);
       updateProduct(editTarget.id, updates);
@@ -270,6 +275,7 @@ export default function ItemManagementPanel() {
                 <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide hidden md:table-cell">Category</th>
                 <th className="text-right px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Price</th>
                 <th className="text-right px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Stock</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide hidden xl:table-cell">Supplier</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide hidden lg:table-cell">Barcode</th>
                 <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Actions</th>
               </tr>
@@ -301,6 +307,7 @@ export default function ItemManagementPanel() {
                         {p.stock}
                       </span>
                     </td>
+                    <td className="px-4 py-3 hidden xl:table-cell text-slate-500 text-xs">{p.supplier || '—'}</td>
                     <td className="px-4 py-3 hidden lg:table-cell font-mono text-xs text-slate-400">{p.barcode}</td>
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-center gap-1.5">
@@ -413,6 +420,10 @@ export default function ItemManagementPanel() {
                 <div>
                   <Label>Rack No.</Label>
                   <Input value={form.rackNo} onChange={v => handleField('rackNo', v)} placeholder="e.g. A-12" />
+                </div>
+                <div>
+                  <Label>Supplier</Label>
+                  <Input value={form.supplier} onChange={v => handleField('supplier', v)} placeholder="e.g. Auto Parts Co." />
                 </div>
                 <div className="sm:col-span-2">
                   <Label>Description</Label>
