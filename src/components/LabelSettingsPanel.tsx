@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Settings, Save, CheckCircle2, ChevronDown } from 'lucide-react';
 import { useBarcodeStore, BarcodeType, LabelSize, validatePriceCodeKey, encodePriceToCode, DEFAULT_LABEL_SETTINGS, DEFAULT_LABEL_TEMPLATE, DEFAULT_PRICE_CODE_KEY } from '../store/barcodeStore';
-import { renderLabelTemplate } from '../services/labelRenderer';
+import { renderLabelTemplate, renderLabel, printLabels } from '../services/labelRenderer';
+import { generateBarcode } from '../services/barcodeGenerator';
 
 const PRESET_SIZES: Record<LabelSize, { width: number; height: number; label: string }> = {
   small:  { width: 38,  height: 25,  label: '38×25mm (Small)' },
@@ -11,7 +12,7 @@ const PRESET_SIZES: Record<LabelSize, { width: number; height: number; label: st
 };
 
 export default function LabelSettingsPanel() {
-  const { labelSettings, setLabelSettings, settingsSaved, setSettingsSaved } = useBarcodeStore();
+  const { labelSettings, setLabelSettings, settingsSaved, setSettingsSaved, selectedPrinter } = useBarcodeStore();
   const [labelSizeKey, setLabelSizeKey] = useState<LabelSize>('medium');
   const [layoutElement, setLayoutElement] = useState<'productName' | 'encryptedPrice' | 'barcode' | 'barcodeNumber' | 'normalPrice'>('productName');
 
@@ -23,6 +24,7 @@ export default function LabelSettingsPanel() {
   const [showBounds, setShowBounds] = useState(true);
   const [showSafeArea, setShowSafeArea] = useState(true);
   const [toastMessage, setToastMessage] = useState('');
+  const [testPrintStatus, setTestPrintStatus] = useState<'idle' | 'printing' | 'done'>('idle');
 
   const sampleProduct = useMemo(() => ({ id: 'sample', sku: 'SAMPLE-001', name: 'SAMPLE PRODUCT NAME', barcode: '201234567890', barcode_type: 'CODE128' as const, price: 1250, category: 'Sample', stock: 1 }), []);
   const sampleBarcode = useMemo(() => `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="440" height="120"><rect width="440" height="120" fill="white"/><g fill="black">${Array.from({length: 55}).map((_,i)=>`<rect x="${i*8}" y="0" width="${i%3===0?4:2}" height="90"/>`).join('')}</g><text x="220" y="112" font-size="16" text-anchor="middle">201234567890</text></svg>`)}`, []);
@@ -81,6 +83,53 @@ export default function LabelSettingsPanel() {
     setLabelSettings({ ...DEFAULT_LABEL_SETTINGS, price_code_key: DEFAULT_PRICE_CODE_KEY, label_template: { ...DEFAULT_LABEL_TEMPLATE, priceCodeKey: DEFAULT_PRICE_CODE_KEY } });
     setShowGrid(false); setShowBounds(false); setShowSafeArea(false);
     showResetToast();
+  };
+
+  const handleTestPrint = async () => {
+    setTestPrintStatus('printing');
+    setToastMessage('Sending test label to printer...');
+    try {
+      const bcResult = await generateBarcode('201234567890', 'CODE128', { displayValue: true });
+      const rendered = await renderLabel({
+        product: sampleProduct as any,
+        barcodeDataUrl: bcResult.dataUrl,
+        barcodeValue: '201234567890',
+        settings: labelSettings,
+        mode: 'print',
+      });
+      const result = await printLabels([rendered.dataUrl], labelSettings, selectedPrinter);
+      setToastMessage(result.success ? 'Test label printed.' : `Test print failed: ${result.failureReason ?? 'unknown error'}`);
+    } catch (e) {
+      setToastMessage(`Test print error: ${(e as Error).message}`);
+    } finally {
+      setTestPrintStatus('done');
+      setTimeout(() => setTestPrintStatus('idle'), 3000);
+    }
+  };
+
+  const handleCalibrationPrint = async () => {
+    setTestPrintStatus('printing');
+    setToastMessage('Sending calibration sheet...');
+    try {
+      const bcResult = await generateBarcode('CALIBRATION', 'CODE128', { displayValue: true });
+      // Render 8 calibration labels with crosshair-like content
+      const rendered = await renderLabel({
+        product: { ...sampleProduct, name: '--- CALIBRATION ---' } as any,
+        barcodeDataUrl: bcResult.dataUrl,
+        barcodeValue: 'CALIBRATION',
+        settings: labelSettings,
+        mode: 'print',
+      });
+      const count = Math.max(1, (labelSettings.columns ?? 2) * (labelSettings.rows ?? 1));
+      const urls = Array.from({ length: count }, () => rendered.dataUrl);
+      const result = await printLabels(urls, labelSettings, selectedPrinter);
+      setToastMessage(result.success ? 'Calibration sheet printed.' : `Calibration failed: ${result.failureReason ?? 'unknown error'}`);
+    } catch (e) {
+      setToastMessage(`Calibration error: ${(e as Error).message}`);
+    } finally {
+      setTestPrintStatus('done');
+      setTimeout(() => setTestPrintStatus('idle'), 3000);
+    }
   };
 
   const handlePreset = (size: LabelSize) => {
@@ -189,8 +238,20 @@ export default function LabelSettingsPanel() {
           <button onClick={resetToDefaultTemplate} className="px-3 py-2 text-xs rounded-lg border border-slate-300">Reset Template</button>
           <button onClick={resetAllLabelSettings} className="px-3 py-2 text-xs rounded-lg border border-slate-300">Reset All</button>
           <button onClick={resetPrintQuality} className="px-3 py-2 text-xs rounded-lg border border-slate-300">Reset Print Quality</button>
-          <button className="px-3 py-2 text-xs rounded-lg border border-slate-300">Test Print</button>
-          <button className="px-3 py-2 text-xs rounded-lg border border-slate-300">Print Calibration Sheet</button>
+          <button
+            onClick={handleTestPrint}
+            disabled={testPrintStatus === 'printing'}
+            className="px-3 py-2 text-xs rounded-lg border border-emerald-300 text-emerald-700 disabled:opacity-50"
+          >
+            {testPrintStatus === 'printing' ? 'Printing...' : 'Test Print'}
+          </button>
+          <button
+            onClick={handleCalibrationPrint}
+            disabled={testPrintStatus === 'printing'}
+            className="px-3 py-2 text-xs rounded-lg border border-violet-300 text-violet-700 disabled:opacity-50"
+          >
+            {testPrintStatus === 'printing' ? 'Printing...' : 'Print Calibration Sheet'}
+          </button>
         </div>
       </Section>
 

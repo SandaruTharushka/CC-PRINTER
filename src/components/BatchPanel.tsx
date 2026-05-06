@@ -119,8 +119,13 @@ export default function BatchPanel() {
         return;
       }
 
-      printLabels(labelDataUrls, labelSettings, selectedPrinter);
-      setStatus(`Sent ${labelDataUrls.length} label(s) to ${selectedPrinter || 'printer'}.`);
+      setStatus('Printing...');
+      const result = await printLabels(labelDataUrls, labelSettings, selectedPrinter);
+      if (result.success) {
+        setStatus(`Printed ${labelDataUrls.length} label(s) to ${selectedPrinter || 'printer'}.`);
+      } else {
+        setStatus(`Print failed: ${result.failureReason ?? 'Unknown error'}`);
+      }
     } catch (e) {
       setStatus('Print error: ' + (e as Error).message);
     } finally {
