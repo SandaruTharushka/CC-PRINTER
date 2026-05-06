@@ -7,6 +7,7 @@
 
 import { LabelSettings, Product } from '../store/barcodeStore';
 import { encodePriceToCode, validatePriceCodeKey } from '../store/barcodeStore';
+import { formatCurrency } from '../utils/currency';
 
 export interface LabelRenderOptions {
   product: Product;
@@ -185,7 +186,7 @@ export async function renderLabel(opts: LabelRenderOptions): Promise<RenderedLab
 
   // Normal price (optional)
   if (template.normalPrice.visible && settings.show_normal_price && settings.label_show_price) {
-    drawTextElement(template.normalPrice, `$${effectivePrice.toFixed(2)}`, '#065f46');
+    drawTextElement(template.normalPrice, formatCurrency(effectivePrice), '#065f46');
   }
 
   if (mode === 'preview' && previewOpts?.showSafeArea) {

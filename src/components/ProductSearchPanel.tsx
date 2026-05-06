@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Search, Package, Plus, X, Tag, Hash, DollarSign, Layers } from 'lucide-react';
 import { useBarcodeStore, Product } from '../store/barcodeStore';
 import * as productService from '../services/productService';
+import { formatCurrency } from '../utils/currency';
 
 interface ProductSearchPanelProps {
   onAddToBatch?: (product: Product) => void;
@@ -96,7 +97,7 @@ export default function ProductSearchPanel({ onAddToBatch, compact }: ProductSea
                     </div>
                   </div>
                   <div className="text-right shrink-0">
-                    <div className="text-sm font-semibold text-emerald-600">${product.price.toFixed(2)}</div>
+                    <div className="text-sm font-semibold text-emerald-600">{formatCurrency(product.price)}</div>
                     <div className="text-xs text-slate-400">{product.stock} in stock</div>
                   </div>
                 </button>
@@ -141,7 +142,7 @@ export default function ProductSearchPanel({ onAddToBatch, compact }: ProductSea
           <div className={`grid grid-cols-2 gap-2 mt-3 ${compact ? 'grid-cols-2' : 'grid-cols-2 sm:grid-cols-4'}`}>
             <InfoCell icon={<Hash className="w-3.5 h-3.5" />} label="SKU" value={selectedProduct.sku} />
             <InfoCell icon={<Tag className="w-3.5 h-3.5" />} label="Barcode" value={selectedProduct.barcode || '—'} mono />
-            <InfoCell icon={<DollarSign className="w-3.5 h-3.5" />} label="Price" value={`$${selectedProduct.price.toFixed(2)}`} highlight />
+            <InfoCell icon={<DollarSign className="w-3.5 h-3.5" />} label="Price" value={formatCurrency(selectedProduct.price)} highlight />
             <InfoCell icon={<Layers className="w-3.5 h-3.5" />} label="Stock" value={`${selectedProduct.stock} units`} />
           </div>
 

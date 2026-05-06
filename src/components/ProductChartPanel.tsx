@@ -5,6 +5,7 @@ import {
 } from 'recharts';
 import { useBarcodeStore } from '../store/barcodeStore';
 import { BarChart2, PieChart as PieIcon, TrendingUp, Package } from 'lucide-react';
+import { formatCurrency, formatCurrencyShort } from '../utils/currency';
 
 type ChartView = 'stock' | 'value' | 'price' | 'category';
 
@@ -97,7 +98,7 @@ export default function ProductChartPanel() {
         <SummaryCard label="Total Stock" value={totalStock.toLocaleString()} sub="units across all items" color="emerald" />
         <SummaryCard
           label="Stock Value"
-          value={`$${totalValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}`}
+          value={formatCurrencyShort(totalValue)}
           sub="total inventory value"
           color="violet"
         />
@@ -160,10 +161,10 @@ export default function ProductChartPanel() {
               <BarChart data={valueByProduct} margin={{ left: 10, right: 10, top: 5, bottom: 60 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
                 <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#64748b' }} angle={-35} textAnchor="end" interval={0} />
-                <YAxis tick={{ fontSize: 11, fill: '#64748b' }} tickFormatter={v => `$${v}`} />
+                <YAxis tick={{ fontSize: 11, fill: '#64748b' }} tickFormatter={v => formatCurrencyShort(Number(v))} />
                 <Tooltip
                   contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12 }}
-                  formatter={(v) => [`$${Number(v).toLocaleString(undefined, { minimumFractionDigits: 2 })}`, 'Value']}
+                  formatter={(v) => [formatCurrency(Number(v)), 'Value']}
                 />
                 <Bar dataKey="value" radius={[4, 4, 0, 0]}>
                   {valueByProduct.map((_, i) => (
@@ -182,10 +183,10 @@ export default function ProductChartPanel() {
               <BarChart data={priceByProduct} margin={{ left: 10, right: 10, top: 5, bottom: 60 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
                 <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#64748b' }} angle={-35} textAnchor="end" interval={0} />
-                <YAxis tick={{ fontSize: 11, fill: '#64748b' }} tickFormatter={v => `$${v}`} />
+                <YAxis tick={{ fontSize: 11, fill: '#64748b' }} tickFormatter={v => formatCurrencyShort(Number(v))} />
                 <Tooltip
                   contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12 }}
-                  formatter={(v) => [`$${Number(v).toFixed(2)}`, 'Price']}
+                  formatter={(v) => [formatCurrency(Number(v)), 'Price']}
                 />
                 <Bar dataKey="price" radius={[4, 4, 0, 0]}>
                   {priceByProduct.map((_, i) => (
@@ -242,7 +243,7 @@ export default function ProductChartPanel() {
                       <div className="text-xs text-slate-400">{cat.count} products · {cat.stock} units</div>
                     </div>
                     <div className="text-sm font-semibold text-slate-600 shrink-0">
-                      ${cat.value.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                      {formatCurrencyShort(cat.value)}
                     </div>
                   </div>
                 ))}
@@ -256,7 +257,7 @@ export default function ProductChartPanel() {
       <div className="bg-indigo-50 border border-indigo-100 rounded-xl px-5 py-3 flex items-center gap-3">
         <TrendingUp className="w-5 h-5 text-indigo-500 shrink-0" />
         <span className="text-sm text-indigo-700">
-          Average unit price across all products: <strong>${avgPrice.toFixed(2)}</strong>
+          Average unit price across all products: <strong>{formatCurrency(avgPrice)}</strong>
         </span>
       </div>
     </div>

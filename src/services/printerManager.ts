@@ -4,14 +4,10 @@
  * GET  /api/barcode-label/printers
  * POST /api/barcode-label/printer/save
  *
- * In a desktop Electron/PyInstaller app, win32print would be called
- * via a Python backend API. Here we simulate detection via the
- * browser Print API and localStorage persistence.
- *
- * Desktop integration note:
- *   - If window.__GMS_PRINTERS__ is injected by PyInstaller/Electron bridge,
- *     it will be used for real printer data.
- *   - Otherwise falls back to browser navigator detection.
+ * Printer detection priority:
+ *   1. Electron webContents.getPrintersAsync() — real system printers
+ *   2. Desktop bridge window.__GMS_PRINTERS__ — injected by PyInstaller/Electron
+ *   3. No system printers available — shows only user-added manual printers
  */
 
 export interface DetectedPrinter {
@@ -20,50 +16,13 @@ export interface DetectedPrinter {
   status: 'connected' | 'disconnected' | 'unknown';
   isDefault: boolean;
   type: 'thermal' | 'inkjet' | 'laser' | 'unknown';
-  connection: string; // e.g., 'usb', 'network', 'unknown'
+  connection: string;
   isManual?: boolean;
 }
 
 const MANUAL_PRINTERS_KEY = 'gms_manual_printers';
 const DEFAULT_PRINTER_KEY = 'gms_default_printer';
 const PRINTER_PROFILE_KEY = 'gms_printer_profiles';
-
-// ── Simulated / Browser-Compatible Printer List ───────────────────────────────
-// In a real desktop app these come from win32print via the Python API
-const SIMULATED_SYSTEM_PRINTERS: DetectedPrinter[] = [
-  {
-    id: 'pdf',
-    name: 'Microsoft Print to PDF',
-    status: 'connected',
-    isDefault: false,
-    type: 'unknown',
-    connection: 'virtual',
-  },
-  {
-    id: 'dymo',
-    name: 'DYMO LabelWriter 450',
-    status: 'connected',
-    isDefault: false,
-    type: 'thermal',
-    connection: 'usb',
-  },
-  {
-    id: 'zebra',
-    name: 'Zebra ZD220 (ZPL)',
-    status: 'connected',
-    isDefault: false,
-    type: 'thermal',
-    connection: 'usb',
-  },
-  {
-    id: 'brother',
-    name: 'Brother QL-820NWB',
-    status: 'disconnected',
-    isDefault: false,
-    type: 'thermal',
-    connection: 'usb',
-  },
-];
 
 // ── Desktop Bridge (PyInstaller / Electron) ───────────────────────────────────
 declare global {
@@ -74,15 +33,14 @@ declare global {
 }
 
 /**
- * Detect installed printers
- * Priority: Electron API → Desktop bridge → Simulated fallback
- * Mirrors: GET /api/barcode-label/printers
- *          GET /api/printing/printers
+ * Detect installed printers.
+ * Priority: Electron API → Desktop bridge → manual-only fallback.
+ * No fake/simulated printers are ever returned.
  */
 export async function detectPrinters(): Promise<{
   printers: DetectedPrinter[];
   win32Available: boolean;
-  source: 'win32' | 'bridge' | 'simulated';
+  source: 'win32' | 'bridge' | 'none';
 }> {
   const manualPrinters = loadManualPrinters();
   const defaultPrinter = getDefaultPrinterName();
@@ -92,11 +50,11 @@ export async function detectPrinters(): Promise<{
     try {
       const raw = await window.electronAPI.getPrinters();
       if (Array.isArray(raw) && raw.length > 0) {
-        const detected: DetectedPrinter[] = raw.map((p: any) => ({
-          id: p.deviceName ?? p.name,
-          name: p.displayName ?? p.deviceName ?? p.name,
-          status: p.status === 0 ? 'connected' : 'disconnected',
-          isDefault: p.isDefault ?? false,
+        const detected: DetectedPrinter[] = raw.map((p: Record<string, unknown>) => ({
+          id: (p.deviceName ?? p.name) as string,
+          name: (p.displayName ?? p.deviceName ?? p.name) as string,
+          status: p.status === 0 ? 'connected' : ('disconnected' as const),
+          isDefault: (p.isDefault ?? false) as boolean,
           type: 'unknown' as const,
           connection: 'system',
         }));
@@ -114,10 +72,9 @@ export async function detectPrinters(): Promise<{
     return { printers: all, win32Available: true, source: 'bridge' };
   }
 
-  // 3. Simulate detection (browser / dev environment)
-  await new Promise(r => setTimeout(r, 600)); // Simulate async detection
-  const all = mergeWithManual(SIMULATED_SYSTEM_PRINTERS, manualPrinters, defaultPrinter);
-  return { printers: all, win32Available: window.__GMS_WIN32PRINT_AVAILABLE__ ?? false, source: 'simulated' };
+  // 3. No system printer detection available — return only user-added manual printers
+  const all = mergeWithManual([], manualPrinters, defaultPrinter);
+  return { printers: all, win32Available: false, source: 'none' };
 }
 
 function mergeWithManual(
@@ -177,9 +134,8 @@ export function getDefaultPrinterName(): string {
 }
 
 /**
- * Save printer settings
+ * Save printer settings.
  * Mirrors: POST /api/barcode-label/printer/save
- *          POST /api/printing/settings/label
  */
 export function savePrinterSettings(settings: {
   printerName: string;
@@ -209,48 +165,61 @@ function loadPrinterProfiles(): Record<string, Record<string, unknown>> {
 }
 
 /**
- * Test print — sends a test page to the selected printer
- * In desktop app, triggers win32print test page
+ * Test print — sends a 50mm × 25mm test label to the selected printer via Electron.
+ * Returns failure if not running in Electron desktop mode.
  */
-export function testPrint(printerName: string): Promise<{ success: boolean; message: string }> {
-  return new Promise(resolve => {
-    if (!printerName) {
-      resolve({ success: false, message: 'No printer selected' });
-      return;
-    }
+export async function testPrint(printerName: string): Promise<{ success: boolean; message: string }> {
+  if (!printerName) {
+    return { success: false, message: 'No printer selected' };
+  }
 
-    // In desktop packaged app: call Python API /api/barcode-label/printer/test
-    // For browser: open a simple print window
-    const win = window.open('', '_blank', 'width=400,height=300');
-    if (!win) {
-      resolve({ success: false, message: 'Popup blocked. Please allow popups.' });
-      return;
-    }
+  if (!window.electronAPI || typeof window.electronAPI.printLabel !== 'function') {
+    return {
+      success: false,
+      message: 'Native Electron printing is not available. Run the app in Electron desktop mode.',
+    };
+  }
 
-    const escapedPrinterName = printerName
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
-    win.document.write(`<!DOCTYPE html>
-<html><head><title>Test Print</title>
-<style>
-body { font-family: Arial; padding: 20px; }
-.test-label { border: 2px dashed #333; padding: 10px; width: 200px; }
-h3 { margin: 0 0 8px; font-size: 14px; }
-p { margin: 0; font-size: 11px; color: #666; }
-</style>
-</head><body>
-<div class="test-label">
-  <h3>&#x2713; Test Print</h3>
-  <p>Printer: ${escapedPrinterName}</p>
-  <p>Garage Management System</p>
-  <p>Label Generator Module</p>
-  <p>${new Date().toLocaleString()}</p>
-</div>
-<script>window.onload=function(){setTimeout(function(){window.print();window.close();},300);}<\/script>
-</body></html>`);
-    win.document.close();
-    resolve({ success: true, message: `Test page sent to ${printerName}` });
-  });
+  const escapedName = printerName
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+
+  const testHtml = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8"/>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    @page { size: 50mm 25mm; margin: 0; }
+    html, body { width: 50mm; height: 25mm; font-family: Arial, sans-serif; }
+    .label { width: 50mm; height: 25mm; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 3mm; }
+    h3 { font-size: 10pt; margin-bottom: 2mm; }
+    p { font-size: 7pt; color: #555; margin: 0.5mm 0; }
+  </style>
+</head>
+<body>
+  <div class="label">
+    <h3>&#x2713; Test Print</h3>
+    <p>${escapedName}</p>
+    <p>${new Date().toLocaleString()}</p>
+  </div>
+</body>
+</html>`;
+
+  try {
+    const result = await window.electronAPI.printLabel(testHtml, printerName, {
+      silent: true,
+      printBackground: true,
+      margins: { marginType: 'none' },
+      pageSize: { width: 50000, height: 25000 },
+    });
+    if (result.success) {
+      return { success: true, message: `Test page sent to ${printerName}` };
+    }
+    return { success: false, message: result.failureReason ?? 'Printer returned failure' };
+  } catch (err) {
+    return { success: false, message: (err as Error).message };
+  }
 }

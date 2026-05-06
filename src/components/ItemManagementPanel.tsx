@@ -9,6 +9,7 @@ import {
   updateProductInDB,
   generateProductId,
 } from '../data/mockProducts';
+import { formatCurrency, formatCurrencyShort } from '../utils/currency';
 
 const BARCODE_TYPES: BarcodeType[] = ['CODE128', 'EAN13', 'QR'];
 
@@ -223,7 +224,7 @@ export default function ItemManagementPanel() {
           { label: 'Categories', value: new Set(products.map(p => p.category)).size },
           {
             label: 'Stock Value',
-            value: `$${products.reduce((s, p) => s + p.price * p.stock, 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+            value: formatCurrencyShort(products.reduce((s, p) => s + p.price * p.stock, 0)),
           },
         ].map(stat => (
           <div key={stat.label} className="bg-white border border-slate-200 rounded-xl px-4 py-3">
@@ -269,7 +270,7 @@ export default function ItemManagementPanel() {
                     <td className="px-4 py-3 hidden md:table-cell">
                       <span className="px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded-full text-[11px] font-medium">{p.category}</span>
                     </td>
-                    <td className="px-4 py-3 text-right font-semibold text-slate-700">${p.price.toFixed(2)}</td>
+                    <td className="px-4 py-3 text-right font-semibold text-slate-700">{formatCurrency(p.price)}</td>
                     <td className="px-4 py-3 text-right">
                       <span className={`font-semibold ${p.stock < 30 ? 'text-red-600' : p.stock < 80 ? 'text-amber-600' : 'text-emerald-600'}`}>
                         {p.stock}
@@ -362,7 +363,7 @@ export default function ItemManagementPanel() {
                   </select>
                 </div>
                 <div>
-                  <Label>Price ($) *</Label>
+                  <Label>Price (LKR) *</Label>
                   <Input type="number" value={form.price} onChange={v => handleField('price', v)} placeholder="0.00" min="0" step="0.01" />
                 </div>
                 <div>
