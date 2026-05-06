@@ -113,9 +113,9 @@ export default function PrinterSettingsPanel() {
          <Settings className="w-4 h-4" />}
         <div>
           {win32Available === true
-            ? 'win32print detected — native Windows printing available'
+            ? 'Native printing detected — system printers are available'
             : win32Available === false
-            ? 'win32print not available — using browser print fallback (simulated: install pywin32 for native)'
+            ? 'No system printers detected — add a printer manually or run in Electron desktop mode'
             : 'Detecting printer system...'}
           {detectionSource && (
             <span className="ml-2 text-xs opacity-70">source: {detectionSource}</span>

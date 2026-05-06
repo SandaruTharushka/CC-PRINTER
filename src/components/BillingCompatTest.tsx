@@ -7,6 +7,7 @@ import { useState } from 'react';
 import { ScanLine, CheckCircle2, XCircle, ShoppingCart } from 'lucide-react';
 import { billingLookup } from '../data/mockProducts';
 import { normalizeScannedCode } from '../store/barcodeStore';
+import { formatCurrency } from '../utils/currency';
 
 export default function BillingCompatTest() {
   const [scanInput, setScanInput] = useState('');
@@ -90,7 +91,7 @@ export default function BillingCompatTest() {
                     <div className="text-xs text-slate-500 flex items-center gap-2">
                       <span>{scanResult.product.sku}</span>
                       <span>•</span>
-                      <span className="text-emerald-600 font-semibold">${scanResult.product.price.toFixed(2)}</span>
+                      <span className="text-emerald-600 font-semibold">{formatCurrency(scanResult.product.price)}</span>
                       <span>•</span>
                       <span>{scanResult.product.stock} in stock</span>
                     </div>
