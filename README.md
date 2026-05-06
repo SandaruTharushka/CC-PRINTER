@@ -1,4 +1,4 @@
-# Barcode & Label Generator - Desktop App
+# CC-PRINTER - Barcode & Label Generator - Desktop App
 
 ## 🚀 Build Instructions (Windows .exe හදන්නේ මෙහෙමයි)
 
