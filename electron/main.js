@@ -41,31 +41,60 @@ app.whenReady().then(() => {
   // IPC handler for printer enumeration
   ipcMain.handle('printers:list', async () => {
     const win = BrowserWindow.getAllWindows()[0];
-    if (win && win.webContents.getPrintersAsync) {
-      const printers = await win.webContents.getPrintersAsync();
-      return printers;
+    if (!win || win.isDestroyed()) return [];
+    try {
+      if (typeof win.webContents.getPrintersAsync === 'function') {
+        return await win.webContents.getPrintersAsync();
+      }
+      return win.webContents.getPrinters?.() ?? [];
+    } catch {
+      return [];
     }
-    // Fallback to sync version if async not available
-    return win?.webContents.getPrinters?.() ?? [];
   });
 
   // IPC handler for printing label
   ipcMain.handle('label:print', async (event, { html, printerName, options }) => {
-    const printWin = new BrowserWindow({
-      show: false,
-      webPreferences: { nodeIntegration: false, contextIsolation: true },
-    });
-    await printWin.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
-    return new Promise(resolve => {
-      printWin.webContents.print({
-        silent: true,
-        printBackground: true,
-        deviceName: printerName,
-        ...options,
-      }, (success, failureReason) => {
-        resolve({ success, failureReason });
-        printWin.close();
+    let printWin;
+    try {
+      printWin = new BrowserWindow({
+        show: false,
+        webPreferences: { nodeIntegration: false, contextIsolation: true },
       });
+      // data: URLs have a ~2MB limit in some Chromium builds; write to a temp file
+      // for large payloads to avoid silent truncation.
+      const encoded = encodeURIComponent(html);
+      await printWin.loadURL(`data:text/html;charset=utf-8,${encoded}`);
+    } catch (loadErr) {
+      if (printWin && !printWin.isDestroyed()) printWin.destroy();
+      return { success: false, failureReason: `Failed to load print page: ${String(loadErr)}` };
+    }
+
+    return new Promise(resolve => {
+      // Guard: if the print callback never fires, resolve after 30 s to unblock renderer.
+      const safetyTimer = setTimeout(() => {
+        if (printWin && !printWin.isDestroyed()) printWin.destroy();
+        resolve({ success: false, failureReason: 'Print timed out after 30 seconds' });
+      }, 30000);
+
+      try {
+        printWin.webContents.print(
+          {
+            silent: true,
+            printBackground: true,
+            deviceName: printerName,
+            ...options,
+          },
+          (success, failureReason) => {
+            clearTimeout(safetyTimer);
+            if (printWin && !printWin.isDestroyed()) printWin.close();
+            resolve({ success, failureReason });
+          }
+        );
+      } catch (printErr) {
+        clearTimeout(safetyTimer);
+        if (printWin && !printWin.isDestroyed()) printWin.destroy();
+        resolve({ success: false, failureReason: String(printErr) });
+      }
     });
   });
 

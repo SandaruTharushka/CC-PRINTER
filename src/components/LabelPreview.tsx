@@ -9,12 +9,17 @@ interface LabelPreviewProps {
 }
 
 export default function LabelPreview({ barcodeDataUrl, qrDataUrl }: LabelPreviewProps) {
-  const { selectedProduct, labelSettings, generatedLabel, manualBarcodeValue } = useBarcodeStore();
+  const selectedProduct = useBarcodeStore(state => state.selectedProduct);
+  const labelSettings = useBarcodeStore(state => state.labelSettings);
+  const generatedLabel = useBarcodeStore(state => state.generatedLabel);
+  const manualBarcodeValue = useBarcodeStore(state => state.manualBarcodeValue);
+
   const [previewDataUrl, setPreviewDataUrl] = useState<string | null>(null);
   const [rendering, setRendering] = useState(false);
   const [zoom, setZoom] = useState(3);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
+  // Manual refresh button handler — runs outside the effect lifecycle
   const renderPreview = useCallback(async () => {
     if (!selectedProduct || !barcodeDataUrl) {
       setPreviewDataUrl(null);
@@ -39,9 +44,38 @@ export default function LabelPreview({ barcodeDataUrl, qrDataUrl }: LabelPreview
     }
   }, [selectedProduct, barcodeDataUrl, qrDataUrl, labelSettings, zoom, generatedLabel?.barcodeValue, manualBarcodeValue]);
 
+  // Auto-render when deps change; cancel stale async work if deps change mid-flight
   useEffect(() => {
-    renderPreview();
-  }, [renderPreview]);
+    let cancelled = false;
+
+    if (!selectedProduct || !barcodeDataUrl) {
+      setPreviewDataUrl(null);
+      return;
+    }
+
+    setRendering(true);
+    renderLabel({
+      product: selectedProduct,
+      barcodeDataUrl,
+      barcodeValue: generatedLabel?.barcodeValue || manualBarcodeValue || selectedProduct.barcode,
+      qrDataUrl: qrDataUrl ?? undefined,
+      settings: labelSettings,
+      previewScale: zoom,
+    })
+      .then(rendered => {
+        if (cancelled) return;
+        setPreviewDataUrl(rendered.dataUrl);
+        canvasRef.current = rendered.canvas;
+      })
+      .catch(e => {
+        if (!cancelled) console.error('Preview render error:', e);
+      })
+      .finally(() => {
+        if (!cancelled) setRendering(false);
+      });
+
+    return () => { cancelled = true; };
+  }, [selectedProduct, barcodeDataUrl, qrDataUrl, labelSettings, zoom, generatedLabel?.barcodeValue, manualBarcodeValue]);
 
   const handleDownload = () => {
     if (!previewDataUrl || !selectedProduct) return;
