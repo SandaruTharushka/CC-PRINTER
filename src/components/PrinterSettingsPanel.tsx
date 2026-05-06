@@ -71,6 +71,22 @@ export default function PrinterSettingsPanel() {
     setSettingsSaved(true);
     setTimeout(() => setSettingsSaved(false), 2000);
   };
+  const handleResetPrinter = () => {
+    if (!window.confirm('Reset printer settings to safe defaults?')) return;
+    setLabelSettings({
+      label_printer_type: 'thermal',
+      orientation: 'portrait',
+      marginTopMm: 0,
+      marginLeftMm: 0,
+      xOffsetMm: 0,
+      yOffsetMm: 0,
+      printDpi: 203,
+      columns: 2,
+      rows: 1,
+    });
+    setSettingsSaved(true);
+    setTimeout(() => setSettingsSaved(false), 2000);
+  };
 
   useEffect(() => {
     if (!selectedPrinter) return;
@@ -277,6 +293,13 @@ export default function PrinterSettingsPanel() {
             {testMsg}
           </span>
         )}
+
+        <button
+          onClick={handleResetPrinter}
+          className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 transition-all"
+        >
+          Reset Printer
+        </button>
 
         <button
           onClick={handleSave}

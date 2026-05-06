@@ -57,6 +57,50 @@ export default function LabelSettingsPanel() {
     setToastMessage('Label settings reset successfully.');
     setTimeout(() => setToastMessage(''), 2500);
   };
+  const resetLayoutSettings = () => {
+    setLabelSettings({
+      label_width_mm: 50,
+      label_height_mm: 25,
+      label_gap_mm: 4,
+      columns: 2,
+      rows: 1,
+      label_template: {
+        ...DEFAULT_LABEL_TEMPLATE,
+        labelWidthMm: 50,
+        labelHeightMm: 25,
+        priceCodeKey: labelSettings.price_code_key,
+      },
+    });
+    setLabelSizeKey('custom');
+    showResetToast();
+  };
+  const resetBarcodeSettings = () => {
+    setLabelSettings({
+      label_barcode_type: 'CODE128',
+      barcode_alignment: 'center',
+      barcodeWidthMm: 44,
+      barcodeHeightMm: 10.5,
+      barcodeRotate: 0,
+      label_font_size: 10,
+      label_show_barcode_text: true,
+      show_encrypted_price_code: true,
+      price_code_enabled: true,
+      label_show_product_name: true,
+      label_show_supplier: true,
+      label_show_price: true,
+      label_template: {
+        ...labelSettings.label_template,
+        barcode: { ...DEFAULT_LABEL_TEMPLATE.barcode },
+        barcodeNumber: { ...DEFAULT_LABEL_TEMPLATE.barcodeNumber },
+        encryptedPrice: { ...DEFAULT_LABEL_TEMPLATE.encryptedPrice },
+      },
+    });
+    showResetToast();
+  };
+  const resetPreviewPositionSettings = () => {
+    setLabelSettings({ marginTopMm: 0, marginLeftMm: 0, xOffsetMm: 0, yOffsetMm: 0 });
+    showResetToast();
+  };
   const resetToDefaultTemplate = () => {
     setLabelSettings({
       label_width_mm: 50,
@@ -205,6 +249,9 @@ export default function LabelSettingsPanel() {
             onChange={v => setLabelSettings({ label_gap_mm: +v })}
           />
         </div>
+        <div className="mt-3">
+          <button onClick={resetLayoutSettings} className="px-3 py-2 text-xs rounded-lg border border-slate-300">Reset Layout</button>
+        </div>
       </Section>
       <Section title="Label Layout Editor">
         <div className="grid grid-cols-2 gap-3">
@@ -256,7 +303,7 @@ export default function LabelSettingsPanel() {
           <button onClick={handleSave} className="px-3 py-2 text-xs rounded-lg border border-indigo-300 text-indigo-600">Save Template</button>
           <button onClick={resetSelectedElement} className="px-3 py-2 text-xs rounded-lg border border-slate-300">Reset Selected</button>
           <button onClick={resetToDefaultTemplate} className="px-3 py-2 text-xs rounded-lg border border-slate-300">Reset Template</button>
-          <button onClick={resetAllLabelSettings} className="px-3 py-2 text-xs rounded-lg border border-slate-300">Reset All</button>
+          <button onClick={resetAllLabelSettings} className="px-3 py-2 text-xs rounded-lg border border-slate-300">Reset All Settings</button>
           <button onClick={resetPrintQuality} className="px-3 py-2 text-xs rounded-lg border border-slate-300">Reset Print Quality</button>
           <button
             onClick={handleTestPrint}
@@ -310,6 +357,9 @@ export default function LabelSettingsPanel() {
             onChange={v => setLabelSettings({ label_default_copies: +v })}
           />
         </div>
+        <div className="mt-3">
+          <button onClick={resetBarcodeSettings} className="px-3 py-2 text-xs rounded-lg border border-slate-300">Reset Barcode</button>
+        </div>
       </Section>
 
       <Section title="Print Layout / Calibration (mm)">
@@ -354,6 +404,9 @@ export default function LabelSettingsPanel() {
               <option value="left">Left</option><option value="center">Center</option><option value="right">Right</option>
             </select>
           </div>
+        </div>
+        <div className="mt-3">
+          <button onClick={resetPreviewPositionSettings} className="px-3 py-2 text-xs rounded-lg border border-slate-300">Reset Preview Position</button>
         </div>
       </Section>
 
