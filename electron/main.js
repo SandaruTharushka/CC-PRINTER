@@ -55,25 +55,34 @@ app.whenReady().then(() => {
   // IPC handler for printing label
   ipcMain.handle('label:print', async (event, { html, printerName, options }) => {
     let printWin;
+    let tempHtmlPath = '';
     try {
       printWin = new BrowserWindow({
         show: false,
         webPreferences: { nodeIntegration: false, contextIsolation: true },
       });
-      // data: URLs have a ~2MB limit in some Chromium builds; write to a temp file
-      // for large payloads to avoid silent truncation.
-      const encoded = encodeURIComponent(html);
-      await printWin.loadURL(`data:text/html;charset=utf-8,${encoded}`);
+      tempHtmlPath = path.join(app.getPath('temp'), `cc-printer-${Date.now()}-${Math.random().toString(36).slice(2)}.html`);
+      fs.writeFileSync(tempHtmlPath, html, 'utf8');
+      await printWin.loadFile(tempHtmlPath);
     } catch (loadErr) {
       if (printWin && !printWin.isDestroyed()) printWin.destroy();
+      if (tempHtmlPath && fs.existsSync(tempHtmlPath)) fs.unlinkSync(tempHtmlPath);
       return { success: false, failureReason: `Failed to load print page: ${String(loadErr)}` };
     }
 
     return new Promise(resolve => {
+      const finalize = (result) => {
+        if (printWin && !printWin.isDestroyed()) {
+          try { printWin.destroy(); } catch {}
+        }
+        if (tempHtmlPath && fs.existsSync(tempHtmlPath)) {
+          try { fs.unlinkSync(tempHtmlPath); } catch {}
+        }
+        resolve(result);
+      };
       // Guard: if the print callback never fires, resolve after 30 s to unblock renderer.
       const safetyTimer = setTimeout(() => {
-        if (printWin && !printWin.isDestroyed()) printWin.destroy();
-        resolve({ success: false, failureReason: 'Print timed out after 30 seconds' });
+        finalize({ success: false, failureReason: 'Print timed out after 30 seconds' });
       }, 30000);
 
       try {
@@ -86,14 +95,12 @@ app.whenReady().then(() => {
           },
           (success, failureReason) => {
             clearTimeout(safetyTimer);
-            if (printWin && !printWin.isDestroyed()) printWin.close();
-            resolve({ success, failureReason });
+            finalize({ success, failureReason });
           }
         );
       } catch (printErr) {
         clearTimeout(safetyTimer);
-        if (printWin && !printWin.isDestroyed()) printWin.destroy();
-        resolve({ success: false, failureReason: String(printErr) });
+        finalize({ success: false, failureReason: String(printErr) });
       }
     });
   });

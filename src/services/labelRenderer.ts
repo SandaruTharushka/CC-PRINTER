@@ -88,9 +88,25 @@ export async function renderLabel(opts: LabelRenderOptions): Promise<RenderedLab
   const toPxScaled = (mm: number) => mmToPx(mm) * scale;
 
   const fitText = (text: string, maxWidth: number) => {
-    let t = text;
-    while (t.length > 0 && ctx.measureText(t).width > maxWidth) t = `${t.slice(0, -1).trimEnd()}…`;
-    return t;
+    if (!text) return '';
+    if (!Number.isFinite(maxWidth) || maxWidth <= 4) return '';
+    if (ctx.measureText(text).width <= maxWidth) return text;
+
+    const ellipsis = '…';
+    const ellipsisWidth = ctx.measureText(ellipsis).width;
+    if (ellipsisWidth > maxWidth) return '';
+
+    let candidate = text.trimEnd();
+    let guard = 0;
+    while (candidate.length > 0 && guard < 500) {
+      const next = candidate.slice(0, -1).trimEnd();
+      if (next.length === candidate.length) return '';
+      candidate = next;
+      if (!candidate) return '';
+      if (ctx.measureText(candidate + ellipsis).width <= maxWidth) return candidate + ellipsis;
+      guard += 1;
+    }
+    return '';
   };
 
   const drawTextElement = (
@@ -248,14 +264,14 @@ export async function renderBatchLabels(
 ): Promise<string[]> {
   const dataUrls: string[] = [];
   for (const item of items) {
+    const rendered = await renderLabel({
+      product: item.product,
+      barcodeDataUrl: item.barcodeDataUrl,
+      barcodeValue: item.product.barcode, // Batch mode assumes existing or already updated barcode
+      qrDataUrl: item.qrDataUrl,
+      settings,
+    });
     for (let i = 0; i < item.copies; i++) {
-      const rendered = await renderLabel({
-        product: item.product,
-        barcodeDataUrl: item.barcodeDataUrl,
-        barcodeValue: item.product.barcode, // Batch mode assumes existing or already updated barcode
-        qrDataUrl: item.qrDataUrl,
-        settings,
-      });
       dataUrls.push(rendered.dataUrl);
     }
   }
@@ -362,13 +378,10 @@ ${labelsHtml}
         },
       });
       if (!result.success) {
-        // Fall back to browser print on Electron failure
-        openBrowserPrint(fullHtml);
         return { success: false, failureReason: result.failureReason ?? 'Printer returned failure' };
       }
       return { success: true };
     } catch (err) {
-      openBrowserPrint(fullHtml);
       return { success: false, failureReason: (err as Error).message };
     }
   }

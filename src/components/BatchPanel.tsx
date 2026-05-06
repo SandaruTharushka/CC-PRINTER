@@ -10,6 +10,8 @@ import * as productService from '../services/productService';
 import ProductSearchPanel from './ProductSearchPanel';
 
 export default function BatchPanel() {
+  const MAX_BATCH_LABELS = 200;
+  const RENDER_YIELD_INTERVAL = 5;
   const {
     batchItems, addBatchItem, removeBatchItem, updateBatchItem,
     clearBatch, toggleBatchItemSelect,
@@ -82,14 +84,21 @@ export default function BatchPanel() {
   };
 
   const handleBatchPrint = async () => {
+    if (printing) return;
     if (batchResults.length === 0) {
       setStatus('Please generate barcodes first.');
+      return;
+    }
+    const totalLabels = batchItems.reduce((sum, b) => sum + (b.selected ? b.copies : 0), 0);
+    if (totalLabels > MAX_BATCH_LABELS) {
+      setStatus('Too many labels for one batch. Print smaller batches.');
       return;
     }
     setPrinting(true);
     setStatus('Rendering labels...');
     try {
       const labelDataUrls: string[] = [];
+      let renderedCount = 0;
 
       for (const result of batchResults) {
         if (!result.success || !result.barcodeDataUrl) continue;
@@ -111,6 +120,11 @@ export default function BatchPanel() {
         const copies = batchItem.copies;
         for (let i = 0; i < copies; i++) {
           labelDataUrls.push(rendered.dataUrl);
+          renderedCount += 1;
+          if (renderedCount % RENDER_YIELD_INTERVAL === 0) {
+            setStatus(`Rendering label ${renderedCount}/${totalLabels}...`);
+            await new Promise(resolve => setTimeout(resolve, 0));
+          }
         }
       }
 
@@ -119,7 +133,7 @@ export default function BatchPanel() {
         return;
       }
 
-      setStatus('Printing...');
+      setStatus(`Printing ${labelDataUrls.length} label(s)...`);
       const result = await printLabels(labelDataUrls, labelSettings, selectedPrinter);
       if (result.success) {
         setStatus(`Printed ${labelDataUrls.length} label(s) to ${selectedPrinter || 'printer'}.`);
@@ -204,12 +218,14 @@ export default function BatchPanel() {
                     else useBarcodeStore.getState().updateBatchItem(b.product.id, { selected: false });
                   });
                 }}
+                disabled={generating || printing}
                 className="text-xs text-indigo-600 hover:text-indigo-700 font-medium"
               >
                 {allSelected ? 'Deselect All' : 'Select All'}
               </button>
               <button
                 onClick={clearBatch}
+                disabled={generating || printing}
                 className="text-xs text-red-500 hover:text-red-600 font-medium flex items-center gap-1"
               >
                 <Trash2 className="w-3.5 h-3.5" />
@@ -231,6 +247,7 @@ export default function BatchPanel() {
                           useBarcodeStore.getState().updateBatchItem(b.product.id, { selected: !allSelected });
                         });
                       }}
+                      disabled={generating || printing}
                       className="accent-indigo-600"
                     />
                   </th>
@@ -253,6 +270,7 @@ export default function BatchPanel() {
                           type="checkbox"
                           checked={item.selected}
                           onChange={() => toggleBatchItemSelect(item.product.id)}
+                          disabled={generating || printing}
                           className="accent-indigo-600"
                         />
                       </td>
@@ -277,6 +295,7 @@ export default function BatchPanel() {
                         <select
                           value={item.barcodeType}
                           onChange={e => updateBatchItem(item.product.id, { barcodeType: e.target.value as BarcodeType })}
+                          disabled={generating || printing}
                           className="text-xs border border-slate-200 rounded-lg px-2 py-1 outline-none"
                         >
                           <option value="CODE128">CODE128</option>
@@ -287,11 +306,13 @@ export default function BatchPanel() {
                         <div className="flex items-center gap-1">
                           <button
                             onClick={() => updateBatchItem(item.product.id, { copies: Math.max(1, item.copies - 1) })}
+                            disabled={generating || printing}
                             className="w-6 h-6 rounded bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center text-sm font-bold"
                           >−</button>
                           <span className="w-8 text-center text-sm font-semibold">{item.copies}</span>
                           <button
                             onClick={() => updateBatchItem(item.product.id, { copies: item.copies + 1 })}
+                            disabled={generating || printing}
                             className="w-6 h-6 rounded bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center text-sm font-bold"
                           >+</button>
                         </div>
@@ -321,6 +342,7 @@ export default function BatchPanel() {
                       <td className="px-4 py-3">
                         <button
                           onClick={() => removeBatchItem(item.product.id)}
+                          disabled={generating || printing}
                           className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500 transition-colors"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -376,7 +398,7 @@ export default function BatchPanel() {
         <div className="flex gap-3 flex-wrap">
           <button
             onClick={handleBatchGenerate}
-            disabled={generating || !someSelected}
+            disabled={generating || printing || !someSelected}
             className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-xl disabled:opacity-40 transition-all"
           >
             <Wand2 className={`w-4 h-4 ${generating ? 'animate-pulse' : ''}`} />
@@ -394,6 +416,7 @@ export default function BatchPanel() {
 
           <button
             onClick={() => { clearBatch(); setBatchResults([]); setStatus(''); }}
+            disabled={generating || printing}
             className="flex items-center gap-2 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 text-sm font-medium rounded-xl transition-all"
           >
             <Trash2 className="w-4 h-4" />
