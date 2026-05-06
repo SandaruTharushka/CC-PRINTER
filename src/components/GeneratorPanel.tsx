@@ -66,11 +66,12 @@ export default function GeneratorPanel() {
   const validateBarcodeInput = (value: string, effectiveBarcodeType: BarcodeType): string => {
     const normalized = value.trim();
     if (!normalized) throw new Error('Barcode value cannot be empty');
-    if (effectiveBarcodeType !== 'CODE128' || /^\d+$/.test(normalized)) {
-      if (!/^\d+$/.test(normalized)) throw new Error('Barcode must contain only numbers');
-    }
-    if (normalized.length < 6 || normalized.length > 20) {
-      throw new Error('Barcode length must be between 6 and 20 characters');
+    // EAN13: digits only, 12–13 characters
+    if (effectiveBarcodeType === 'EAN13') {
+      if (!/^\d{12,13}$/.test(normalized)) throw new Error('EAN13 barcode must be exactly 12 or 13 digits');
+    } else {
+      // CODE128: printable ASCII, 1–48 characters
+      if (normalized.length < 1 || normalized.length > 48) throw new Error('Barcode length must be between 1 and 48 characters');
     }
     if (barcodeExistsAnywhere(normalized, selectedProduct?.id)) {
       throw new Error('Barcode already exists. Generate a new one or enter another barcode.');
@@ -162,9 +163,8 @@ export default function GeneratorPanel() {
   const handlePrint = async () => {
     if (!barcodeDataUrl || !selectedProduct) return;
     setPrinting(true);
-    setPrintStatus('printing');
+    setPrintStatus('printing', 'Sending to printer...');
     try {
-      // We need a rendered label; import dynamically to avoid circular deps
       const { renderLabel } = await import('../services/labelRenderer');
       const rendered = await renderLabel({
         product: selectedProduct,
@@ -174,8 +174,12 @@ export default function GeneratorPanel() {
         settings: labelSettings,
       });
       const labelDataUrls = Array.from({ length: copies }, () => rendered.dataUrl);
-      printLabels(labelDataUrls, labelSettings, selectedPrinter);
-      setPrintStatus('success', `Sent ${copies} label(s) to ${selectedPrinter || 'printer'}`);
+      const result = await printLabels(labelDataUrls, labelSettings, selectedPrinter);
+      if (result.success) {
+        setPrintStatus('success', `Printed ${copies} label(s) to ${selectedPrinter || 'printer'}`);
+      } else {
+        setPrintStatus('error', result.failureReason ?? 'Print failed');
+      }
     } catch (e) {
       setPrintStatus('error', (e as Error).message);
     } finally {

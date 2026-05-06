@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { storageReadSync, storageWrite } from '../services/storageService';
 
 export type BarcodeType = 'CODE128' | 'EAN13' | 'QR';
 export type QRPayloadType = 'plain' | 'json';
@@ -282,58 +283,47 @@ export function findProductByScannedCode(products: Product[], raw: string): Prod
   return products.find(p => normalizeScannedCode(p.barcode) === normalized);
 }
 
-// Persistent settings key
+// Storage keys
 const SETTINGS_KEY = 'gms_label_settings';
 const HISTORY_KEY = 'gms_label_history';
 const PRINTER_KEY = 'gms_selected_printer';
 const AUTO_GENERATE_KEY = 'gms_auto_generate_barcode';
 const GENERATED_BARCODES_KEY = 'gms_generated_barcode_history';
 
+// All keys that should be synced from Electron disk storage on startup
+export const STORAGE_KEYS = [SETTINGS_KEY, HISTORY_KEY, GENERATED_BARCODES_KEY] as const;
+
 function loadSettings(): LabelSettings {
-  try {
-    const stored = localStorage.getItem(SETTINGS_KEY);
-    if (stored) {
-      const parsed = JSON.parse(stored) as Partial<LabelSettings>;
-      return {
-        ...DEFAULT_SETTINGS,
-        ...parsed,
-        label_template: {
-          ...DEFAULT_SETTINGS.label_template,
-          ...(parsed.label_template ?? {}),
-        },
-      };
-    }
-  } catch {}
+  const raw = storageReadSync<Partial<LabelSettings> | null>(SETTINGS_KEY, null);
+  if (raw && typeof raw === 'object') {
+    return {
+      ...DEFAULT_SETTINGS,
+      ...raw,
+      label_template: {
+        ...DEFAULT_SETTINGS.label_template,
+        ...(raw.label_template ?? {}),
+      },
+    };
+  }
   return DEFAULT_SETTINGS;
 }
 
 function loadHistory(): GeneratedLabel[] {
-  try {
-    const stored = localStorage.getItem(HISTORY_KEY);
-    if (stored) {
-      const arr = JSON.parse(stored) as GeneratedLabel[];
-      return arr.map(h => ({ ...h, timestamp: new Date(h.timestamp) }));
-    }
-  } catch {}
-  return [];
+  const arr = storageReadSync<GeneratedLabel[]>(HISTORY_KEY, []);
+  return Array.isArray(arr)
+    ? arr.map(h => ({ ...h, timestamp: new Date(h.timestamp) }))
+    : [];
 }
 
 function loadAutoGenerateBarcode(): boolean {
   try {
     return localStorage.getItem(AUTO_GENERATE_KEY) === 'true';
-  } catch {}
-  return false;
+  } catch { return false; }
 }
 
 function loadGeneratedBarcodeHistory(): string[] {
-  try {
-    const stored = localStorage.getItem(GENERATED_BARCODES_KEY);
-    if (stored) {
-      const parsed = JSON.parse(stored) as string[];
-      if (Array.isArray(parsed)) return parsed.filter(Boolean);
-    }
-  } catch {}
-  return [];
+  const arr = storageReadSync<string[]>(GENERATED_BARCODES_KEY, []);
+  return Array.isArray(arr) ? arr.filter(Boolean) : [];
 }
 
 export const useBarcodeStore = create<BarcodeStore>((set, get) => ({
@@ -367,7 +357,7 @@ export const useBarcodeStore = create<BarcodeStore>((set, get) => ({
   setQrPayloadType: (type) => set({ qrPayloadType: type }),
   setManualBarcodeValue: (val) => set({ manualBarcodeValue: val }),
   setAutoGenerateBarcode: (enabled) => {
-    localStorage.setItem(AUTO_GENERATE_KEY, String(enabled));
+    try { localStorage.setItem(AUTO_GENERATE_KEY, String(enabled)); } catch { /* ignore */ }
     set({ autoGenerateBarcode: enabled });
   },
   addGeneratedBarcodeToHistory: (barcode) => {
@@ -375,7 +365,7 @@ export const useBarcodeStore = create<BarcodeStore>((set, get) => ({
     if (!normalized) return;
     set(state => {
       const deduped = [normalized, ...state.generatedBarcodeHistory.filter(b => b !== normalized)].slice(0, 5000);
-      localStorage.setItem(GENERATED_BARCODES_KEY, JSON.stringify(deduped));
+      storageWrite(GENERATED_BARCODES_KEY, deduped);
       return { generatedBarcodeHistory: deduped };
     });
   },
@@ -396,21 +386,48 @@ export const useBarcodeStore = create<BarcodeStore>((set, get) => ({
   setGeneratedLabel: (label) => set({ generatedLabel: label }),
   setPrinters: (printers) => set({ printers }),
   setSelectedPrinter: (name) => {
-    localStorage.setItem(PRINTER_KEY, name);
+    try { localStorage.setItem(PRINTER_KEY, name); } catch { /* ignore */ }
     set({ selectedPrinter: name });
   },
   setPrintersLoading: (loading) => set({ printersLoading: loading }),
   setPrinterError: (err) => set({ printerError: err }),
   setLabelSettings: (settings) => {
-    // Only block if price_code_key is explicitly being changed to an invalid value
+    // Block invalid price_code_key changes
     if (settings.price_code_key !== undefined) {
       const { valid } = validatePriceCodeKey(settings.price_code_key);
       if (!valid) return;
     }
+    // Clamp label dimensions to safe physical ranges
+    if (settings.label_width_mm !== undefined) {
+      settings = { ...settings, label_width_mm: Math.max(10, Math.min(300, settings.label_width_mm)) };
+    }
+    if (settings.label_height_mm !== undefined) {
+      settings = { ...settings, label_height_mm: Math.max(10, Math.min(300, settings.label_height_mm)) };
+    }
+    if (settings.label_gap_mm !== undefined) {
+      settings = { ...settings, label_gap_mm: Math.max(0, Math.min(50, settings.label_gap_mm)) };
+    }
+    // Clamp columns/rows to valid range
+    if (settings.columns !== undefined) {
+      settings = { ...settings, columns: Math.max(1, Math.min(20, Math.round(settings.columns))) };
+    }
+    if (settings.rows !== undefined) {
+      settings = { ...settings, rows: Math.max(1, Math.min(20, Math.round(settings.rows))) };
+    }
     const current = get().labelSettings;
-    const updated = { ...current, ...settings };
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify(updated));
-    set({ labelSettings: updated });
+    const merged = { ...current, ...settings };
+    // Auto-sync label_template dimensions when label size changes
+    const widthChanged = settings.label_width_mm !== undefined && settings.label_width_mm !== current.label_width_mm;
+    const heightChanged = settings.label_height_mm !== undefined && settings.label_height_mm !== current.label_height_mm;
+    if (widthChanged || heightChanged) {
+      merged.label_template = {
+        ...merged.label_template,
+        labelWidthMm: merged.label_width_mm,
+        labelHeightMm: merged.label_height_mm,
+      };
+    }
+    storageWrite(SETTINGS_KEY, merged);
+    set({ labelSettings: merged });
   },
   setSettingsSaved: (saved) => set({ settingsSaved: saved }),
   addBatchItem: (item) => {
@@ -439,12 +456,12 @@ export const useBarcodeStore = create<BarcodeStore>((set, get) => ({
   addToHistory: (label) => {
     set(state => {
       const updated = [label, ...state.labelHistory].slice(0, 100);
-      localStorage.setItem(HISTORY_KEY, JSON.stringify(updated));
+      storageWrite(HISTORY_KEY, updated);
       return { labelHistory: updated };
     });
   },
   clearHistory: () => {
-    localStorage.removeItem(HISTORY_KEY);
+    storageWrite(HISTORY_KEY, []);
     set({ labelHistory: [] });
   },
   updateProductBarcode: (productId, barcode, barcodeType) =>

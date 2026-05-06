@@ -1,5 +1,6 @@
 const { app, BrowserWindow, Menu, ipcMain } = require('electron');
 const path = require('path');
+const fs = require('fs');
 
 
 function createWindow() {
@@ -70,6 +71,42 @@ app.whenReady().then(() => {
 
   ipcMain.handle('app:getVersion', () => {
     return app.getVersion();
+  });
+
+  // File-based storage IPC — persists data under app userData directory
+  const userDataPath = app.getPath('userData');
+
+  ipcMain.handle('storage:read', async (_event, key) => {
+    const filePath = path.join(userDataPath, `${key}.json`);
+    try {
+      const raw = fs.readFileSync(filePath, 'utf8');
+      return { ok: true, data: JSON.parse(raw) };
+    } catch (e) {
+      // File missing or corrupted — not an error, caller handles it
+      return { ok: false, error: String(e) };
+    }
+  });
+
+  ipcMain.handle('storage:write', async (_event, key, value) => {
+    const filePath = path.join(userDataPath, `${key}.json`);
+    const tmpPath = filePath + '.tmp';
+    try {
+      // Write to temp file first, then rename — prevents corruption on crash
+      fs.writeFileSync(tmpPath, JSON.stringify(value), 'utf8');
+      fs.renameSync(tmpPath, filePath);
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: String(e) };
+    }
+  });
+
+  ipcMain.handle('storage:keys', async () => {
+    try {
+      const files = fs.readdirSync(userDataPath).filter(f => f.endsWith('.json'));
+      return files.map(f => f.replace(/\.json$/, ''));
+    } catch {
+      return [];
+    }
   });
 
   app.on('activate', () => {

@@ -43,9 +43,6 @@ function mmToPx(mm: number): number {
   return Math.round(mm * MM_TO_PX);
 }
 
-function rotationCss(deg: 0 | 90 | 180 | 270): string {
-  return deg === 0 ? 'none' : `rotate(${deg}deg)`;
-}
 
 /**
  * Render a label canvas
@@ -88,84 +85,107 @@ export async function renderLabel(opts: LabelRenderOptions): Promise<RenderedLab
   }
 
   const toPxScaled = (mm: number) => mmToPx(mm) * scale;
-  const padding = toPxScaled(1);
+
   const fitText = (text: string, maxWidth: number) => {
     let t = text;
     while (t.length > 0 && ctx.measureText(t).width > maxWidth) t = `${t.slice(0, -1).trimEnd()}…`;
     return t;
   };
 
+  const drawTextElement = (
+    el: { visible: boolean; xMm: number; yMm: number; widthMm: number; heightMm: number; fontSizePx?: number; bold?: boolean; align?: string },
+    text: string,
+    color: string
+  ) => {
+    ctx.fillStyle = color;
+    ctx.font = `${el.bold ? 'bold' : 'normal'} ${el.fontSizePx ?? 8}px Arial, sans-serif`;
+    ctx.textAlign = (el.align ?? 'center') as CanvasTextAlign;
+    ctx.textBaseline = 'middle';
+    const x = toPxScaled(el.xMm);
+    const y = toPxScaled(el.yMm);
+    const w = toPxScaled(el.widthMm);
+    const h = toPxScaled(el.heightMm);
+    const tx = el.align === 'left' ? x : el.align === 'right' ? x + w : x + w / 2;
+    ctx.fillText(fitText(text, w), tx, y + h / 2);
+  };
+
+  // Company name (top strip, if enabled)
+  if (settings.label_show_company && settings.label_company_name) {
+    ctx.fillStyle = '#1e3a5f';
+    ctx.fillRect(0, 0, widthPx, toPxScaled(3.5));
+    ctx.fillStyle = '#ffffff';
+    ctx.font = `bold ${Math.max(5, toPxScaled(0.35))}px Arial, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(
+      fitText(settings.label_company_name, widthPx - toPxScaled(2)),
+      widthPx / 2,
+      toPxScaled(1.75)
+    );
+  }
+
   // Product name (single line + ellipsis)
   if (template.productName.visible && settings.label_show_product_name) {
-    ctx.fillStyle = '#0f172a';
-    ctx.font = `${template.productName.bold ? 'bold' : 'normal'} ${template.productName.fontSizePx ?? 8}px Arial, sans-serif`;
-    ctx.textAlign = (template.productName.align ?? 'center') as CanvasTextAlign;
-    ctx.textBaseline = 'middle';
-    const x = toPxScaled(template.productName.xMm);
-    const y = toPxScaled(template.productName.yMm);
-    const w = toPxScaled(template.productName.widthMm);
-    const h = toPxScaled(template.productName.heightMm);
-    const tx = template.productName.align === 'left' ? x : template.productName.align === 'right' ? x + w : x + (w / 2);
-    ctx.fillText(fitText(product.name || '', w), tx, y + (h / 2));
+    drawTextElement(template.productName, product.name || '', '#0f172a');
   }
 
   const effectivePrice = product.price ?? 0;
+
+  // Encrypted price code
   if (template.encryptedPrice.visible && settings.price_code_enabled && settings.show_encrypted_price_code && validatePriceCodeKey(settings.price_code_key).valid) {
-    ctx.fillStyle = '#111827';
-    ctx.font = `${template.encryptedPrice.bold ? 'bold' : 'normal'} ${template.encryptedPrice.fontSizePx ?? 7}px Arial, sans-serif`;
-    ctx.textAlign = (template.encryptedPrice.align ?? 'center') as CanvasTextAlign;
-    ctx.textBaseline = 'middle';
-    const x = toPxScaled(template.encryptedPrice.xMm); const y = toPxScaled(template.encryptedPrice.yMm);
-    const w = toPxScaled(template.encryptedPrice.widthMm); const h = toPxScaled(template.encryptedPrice.heightMm);
-    const tx = template.encryptedPrice.align === 'left' ? x : template.encryptedPrice.align === 'right' ? x + w : x + (w / 2);
-    ctx.fillText(encodePriceToCode(effectivePrice, settings.price_code_key), tx, y + (h / 2));
+    drawTextElement(template.encryptedPrice, encodePriceToCode(effectivePrice, settings.price_code_key), '#111827');
   }
 
-  // Barcode image
+  // Barcode image — supports rotation via settings.barcodeRotate
   const barcodeImg = await loadImage(barcodeDataUrl);
   const hasQR = settings.label_show_qr && qrDataUrl;
   const barcodeAreaWidth = toPxScaled(template.barcode.widthMm);
-  const barcodeHeight = toPxScaled(template.barcode.heightMm);
+  const barcodeAreaHeight = toPxScaled(template.barcode.heightMm);
   const barcodeX = toPxScaled(template.barcode.xMm);
   const barcodeY = toPxScaled(template.barcode.yMm);
+  const rotate = settings.barcodeRotate ?? 0;
 
   if (barcodeImg) {
-    ctx.drawImage(barcodeImg, barcodeX, barcodeY, barcodeAreaWidth, barcodeHeight);
+    if (rotate === 0) {
+      ctx.drawImage(barcodeImg, barcodeX, barcodeY, barcodeAreaWidth, barcodeAreaHeight);
+    } else {
+      // Rotate around barcode centre
+      const cx = barcodeX + barcodeAreaWidth / 2;
+      const cy = barcodeY + barcodeAreaHeight / 2;
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate((rotate * Math.PI) / 180);
+      // For 90/270 swap width/height when drawing
+      const dw = rotate === 90 || rotate === 270 ? barcodeAreaHeight : barcodeAreaWidth;
+      const dh = rotate === 90 || rotate === 270 ? barcodeAreaWidth : barcodeAreaHeight;
+      ctx.drawImage(barcodeImg, -dw / 2, -dh / 2, dw, dh);
+      ctx.restore();
+    }
   }
 
-  // QR code (right side)
+  // QR code (right side, or centred when no barcode)
   if (hasQR && qrDataUrl) {
     const qrImg = await loadImage(qrDataUrl);
     if (qrImg) {
-      const qrSize = Math.min(barcodeHeight, Math.round(widthPx * 0.28));
-      const qrX = widthPx - padding - qrSize;
-      const qrY = barcodeY + (barcodeHeight - qrSize) / 2;
+      const qrSize = Math.min(barcodeAreaHeight, Math.round(widthPx * 0.28));
+      const qrX = widthPx - toPxScaled(1) - qrSize;
+      const qrY = barcodeY + (barcodeAreaHeight - qrSize) / 2;
       ctx.drawImage(qrImg, qrX, qrY, qrSize, qrSize);
     }
   }
 
-  // Barcode text value
+  // Barcode number text
   if (template.barcodeNumber.visible && settings.label_show_barcode_text && template.barcode.showText) {
-    ctx.fillStyle = '#374151';
-    ctx.font = `${template.barcodeNumber.fontSizePx ?? 7}px monospace`;
-    ctx.textAlign = (template.barcodeNumber.align ?? 'center') as CanvasTextAlign;
-    ctx.textBaseline = 'middle';
-    const x = toPxScaled(template.barcodeNumber.xMm); const y = toPxScaled(template.barcodeNumber.yMm);
-    const w = toPxScaled(template.barcodeNumber.widthMm); const h = toPxScaled(template.barcodeNumber.heightMm);
-    const tx = template.barcodeNumber.align === 'left' ? x : template.barcodeNumber.align === 'right' ? x + w : x + (w / 2);
-    ctx.fillText(opts.barcodeValue || product.barcode, tx, y + (h / 2));
+    drawTextElement(
+      { ...template.barcodeNumber, bold: false },
+      opts.barcodeValue || product.barcode,
+      '#374151'
+    );
   }
 
-  // Normal Price (optional)
+  // Normal price (optional)
   if (template.normalPrice.visible && settings.show_normal_price && settings.label_show_price) {
-    ctx.fillStyle = '#065f46';
-    ctx.font = `${template.normalPrice.bold ? 'bold' : 'normal'} ${template.normalPrice.fontSizePx ?? 7}px Arial, sans-serif`;
-    ctx.textAlign = (template.normalPrice.align ?? 'center') as CanvasTextAlign;
-    ctx.textBaseline = 'middle';
-    const x = toPxScaled(template.normalPrice.xMm); const y = toPxScaled(template.normalPrice.yMm);
-    const w = toPxScaled(template.normalPrice.widthMm); const h = toPxScaled(template.normalPrice.heightMm);
-    const tx = template.normalPrice.align === 'left' ? x : template.normalPrice.align === 'right' ? x + w : x + (w / 2);
-    ctx.fillText(`$${effectivePrice.toFixed(2)}`, tx, y + (h / 2));
+    drawTextElement(template.normalPrice, `$${effectivePrice.toFixed(2)}`, '#065f46');
   }
 
   if (mode === 'preview' && previewOpts?.showSafeArea) {
@@ -246,36 +266,33 @@ export async function renderBatchLabels(
  * Native Windows print when invoked from Electron/desktop packaged app
  */
 
-function barcodeMarkup(url: string): string {
-  if (url.startsWith('data:image/svg+xml')) {
-    const encoded = url.split(',', 2)[1] ?? '';
-    return decodeURIComponent(encoded);
-  }
-  return `<img class="barcode-fallback" src="${url}" />`;
-}
-
-export function printLabels(
+export async function printLabels(
   labelDataUrls: string[],
   settings: LabelSettings,
   printerName?: string
-): void {
-  if (labelDataUrls.length === 0) return;
+): Promise<{ success: boolean; failureReason?: string }> {
+  if (labelDataUrls.length === 0) {
+    return { success: false, failureReason: 'No labels to print' };
+  }
 
   const orientationWidth = settings.orientation === 'landscape' ? settings.label_height_mm : settings.label_width_mm;
   const orientationHeight = settings.orientation === 'landscape' ? settings.label_width_mm : settings.label_height_mm;
+
+  // Each labelDataUrl is a full rendered label PNG — display at exact label dimensions
   const labelsHtml = labelDataUrls
     .map(
-      (url, i) =>
-        `<div class="label">
-          ${barcodeMarkup(url)}
-        </div>`
+      url =>
+        `<div class="label"><img src="${url}" /></div>`
     )
     .join('\n');
 
   const sheetColumns = Math.max(1, settings.columns);
   const sheetRows = Math.max(1, settings.rows);
-  const sheetWidth = (orientationWidth * sheetColumns) + (settings.label_gap_mm * (sheetColumns - 1));
-  const sheetHeight = (orientationHeight * sheetRows) + (settings.label_gap_mm * (sheetRows - 1));
+  const gapMm = settings.label_gap_mm ?? 0;
+  const sheetWidth = orientationWidth * sheetColumns + gapMm * (sheetColumns - 1);
+  const sheetHeight = orientationHeight * sheetRows + gapMm * (sheetRows - 1);
+  const marginTop = (settings.marginTopMm ?? 0) + (settings.yOffsetMm ?? 0);
+  const marginLeft = (settings.marginLeftMm ?? 0) + (settings.xOffsetMm ?? 0);
 
   const fullHtml = `<!DOCTYPE html>
 <html>
@@ -288,58 +305,35 @@ export function printLabels(
       size: ${sheetWidth}mm ${sheetHeight}mm;
       margin: 0;
     }
-
     html, body {
       width: ${sheetWidth}mm;
-      height: ${sheetHeight}mm;
+      background: white;
       margin: 0;
       padding: 0;
-      overflow: hidden;
-      background: white;
     }
-
     .sheet {
       display: grid;
       grid-template-columns: repeat(${sheetColumns}, ${orientationWidth}mm);
-      column-gap: ${settings.label_gap_mm}mm;
-      grid-template-rows: repeat(${sheetRows}, ${orientationHeight}mm);
-      row-gap: ${settings.label_gap_mm}mm;
+      column-gap: ${gapMm}mm;
+      row-gap: ${gapMm}mm;
       width: ${sheetWidth}mm;
-      height: ${sheetHeight}mm;
-      margin: ${settings.marginTopMm + settings.yOffsetMm}mm 0 0 ${settings.marginLeftMm + settings.xOffsetMm}mm;
+      margin-top: ${marginTop}mm;
+      margin-left: ${marginLeft}mm;
       padding: 0;
     }
-
     .label {
       width: ${orientationWidth}mm;
       height: ${orientationHeight}mm;
-      box-sizing: border-box;
       overflow: hidden;
       margin: 0;
-      padding: 1mm;
-      page-break-after: always;
-      display: flex;
-      align-items: center;
-      justify-content: center;
+      padding: 0;
+      page-break-inside: avoid;
     }
-
-    .label:last-child { page-break-after: auto; }
-
-    svg {
-      width: 44mm;
-      height: 12mm;
+    .label img {
+      width: ${orientationWidth}mm;
+      height: ${orientationHeight}mm;
       display: block;
-    }
-
-    .barcode-fallback {
-      width: 44mm;
-      height: 12mm;
-      display: block;
-    }
-
-    * {
-      image-rendering: auto;
-      filter: none !important;
+      object-fit: fill;
     }
     @media print {
       body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
@@ -353,25 +347,34 @@ ${labelsHtml}
 </body>
 </html>`;
 
-  // If running in Electron with the bridge available
+  // Electron native silent print — returns real success/failure
   if (window.electronAPI && typeof window.electronAPI.printLabel === 'function') {
-    window.electronAPI.printLabel(fullHtml, printerName || '', {
-      silent: true,
-      printBackground: true,
-      margins: { marginType: 'none' },
-      scaleFactor: 100,
-      pageSize: {
-        width: sheetWidth * 1000,
-        height: sheetHeight * 1000,
+    try {
+      const result = await window.electronAPI.printLabel(fullHtml, printerName || '', {
+        silent: true,
+        printBackground: true,
+        margins: { marginType: 'none' },
+        scaleFactor: 100,
+        pageSize: {
+          width: Math.round(sheetWidth * 1000),
+          height: Math.round(sheetHeight * 1000),
+        },
+      });
+      if (!result.success) {
+        // Fall back to browser print on Electron failure
+        openBrowserPrint(fullHtml);
+        return { success: false, failureReason: result.failureReason ?? 'Printer returned failure' };
       }
-    }).catch((err: any) => {
-      console.error('Direct print failed:', err);
-      alert('Direct printing failed. Falling back to browser print.');
+      return { success: true };
+    } catch (err) {
       openBrowserPrint(fullHtml);
-    });
-  } else {
-    openBrowserPrint(fullHtml);
+      return { success: false, failureReason: (err as Error).message };
+    }
   }
+
+  // Browser fallback (dev / non-Electron)
+  openBrowserPrint(fullHtml);
+  return { success: true }; // browser print dialog opened — user controls outcome
 }
 
 function openBrowserPrint(html: string) {

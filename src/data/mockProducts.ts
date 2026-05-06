@@ -1,4 +1,5 @@
 import { Product, BarcodeType } from '../store/barcodeStore';
+import { storageReadSync, storageWrite } from '../services/storageService';
 
 // Simulated product database — mirrors the backend Product model
 // Fields: id, name, sku, barcode, barcode_type, price, category, stock
@@ -142,20 +143,15 @@ const DEFAULT_PRODUCTS: Product[] = [
 ];
 
 export function loadProducts(): Product[] {
-  try {
-    const stored = localStorage.getItem(PRODUCTS_KEY);
-    if (stored) {
-      const parsed = JSON.parse(stored) as Product[];
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-    }
-  } catch {}
-  // Seed defaults
-  localStorage.setItem(PRODUCTS_KEY, JSON.stringify(DEFAULT_PRODUCTS));
+  const parsed = storageReadSync<Product[] | null>(PRODUCTS_KEY, null);
+  if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+  // Seed defaults on first run
+  saveProducts(DEFAULT_PRODUCTS);
   return DEFAULT_PRODUCTS;
 }
 
 export function saveProducts(products: Product[]): void {
-  localStorage.setItem(PRODUCTS_KEY, JSON.stringify(products));
+  storageWrite(PRODUCTS_KEY, products);
 }
 
 export function updateProductBarcodeInDB(

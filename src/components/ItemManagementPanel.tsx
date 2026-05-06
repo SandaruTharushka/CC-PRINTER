@@ -56,12 +56,25 @@ function productToForm(p: Product): FormState {
   };
 }
 
-function validate(form: FormState): string | null {
+function validate(form: FormState, products: Product[], editTargetId?: string): string | null {
   if (!form.name.trim()) return 'Product name is required';
+  if (form.name.trim().length < 2) return 'Product name must be at least 2 characters';
   if (!form.sku.trim()) return 'SKU is required';
   if (!form.barcode.trim()) return 'Barcode is required';
-  if (isNaN(parseFloat(form.price)) || parseFloat(form.price) < 0) return 'Valid price is required';
-  if (isNaN(parseInt(form.stock)) || parseInt(form.stock) < 0) return 'Valid stock quantity is required';
+  if (form.barcode_type === 'EAN13' && !/^\d{12,13}$/.test(form.barcode.trim())) {
+    return 'EAN13 barcode must be exactly 12 or 13 digits';
+  }
+  const price = parseFloat(form.price);
+  if (isNaN(price) || price < 0) return 'Price must be a valid number ≥ 0';
+  if (price > 1_000_000) return 'Price value seems unrealistically large';
+  const stock = parseInt(form.stock);
+  if (isNaN(stock) || stock < 0) return 'Stock must be a valid number ≥ 0';
+  // Duplicate barcode check (excluding the product being edited)
+  const normalised = form.barcode.trim();
+  const duplicate = products.find(
+    p => p.id !== editTargetId && p.barcode.trim() === normalised
+  );
+  if (duplicate) return `Barcode "${normalised}" is already used by "${duplicate.name}"`;
   return null;
 }
 
@@ -119,7 +132,7 @@ export default function ItemManagementPanel() {
   );
 
   const handleSave = () => {
-    const err = validate(form);
+    const err = validate(form, products, editTarget?.id);
     if (err) { setFormError(err); return; }
 
     if (modal === 'add') {
