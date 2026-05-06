@@ -31,13 +31,17 @@ export async function storageRead<T>(key: string, defaultValue: T): Promise<T> {
   }
 
   // 2. localStorage fallback / cache
+  let lsRaw: string | null = null;
   try {
-    const raw = localStorage.getItem(key);
-    if (raw !== null) {
-      return JSON.parse(raw) as T;
+    lsRaw = localStorage.getItem(key);
+    if (lsRaw !== null) {
+      return JSON.parse(lsRaw) as T;
     }
   } catch {
-    // corrupted localStorage entry — remove it
+    // corrupted localStorage entry — back up before removing
+    if (lsRaw !== null) {
+      try { localStorage.setItem(`${key}__corrupted_${Date.now()}`, lsRaw); } catch { /* ignore */ }
+    }
     try { localStorage.removeItem(key); } catch { /* ignore */ }
   }
 
@@ -68,14 +72,27 @@ export async function storageWrite<T>(key: string, value: T): Promise<void> {
 /**
  * Synchronous read for store initialisation (localStorage only).
  * Call `hydrateFromDisk()` after store init to upgrade from Electron files.
+ *
+ * If the stored JSON is corrupted, the raw bytes are backed up under
+ * `<key>__corrupted_<timestamp>` before the broken entry is removed,
+ * so user data is never silently destroyed.
  */
 export function storageReadSync<T>(key: string, defaultValue: T): T {
+  let raw: string | null = null;
   try {
-    const raw = localStorage.getItem(key);
+    raw = localStorage.getItem(key);
     if (raw !== null) {
       return JSON.parse(raw) as T;
     }
   } catch {
+    // Backup the corrupted bytes before removing them
+    if (raw !== null) {
+      try {
+        const backupKey = `${key}__corrupted_${Date.now()}`;
+        localStorage.setItem(backupKey, raw);
+        console.warn(`[storage] Corrupted entry backed up as "${backupKey}". Resetting "${key}" to default.`);
+      } catch { /* ignore – storage full or access denied */ }
+    }
     try { localStorage.removeItem(key); } catch { /* ignore */ }
   }
   return defaultValue;

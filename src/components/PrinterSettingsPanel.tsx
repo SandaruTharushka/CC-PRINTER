@@ -75,8 +75,23 @@ export default function PrinterSettingsPanel() {
   useEffect(() => {
     if (!selectedPrinter) return;
     const profile = loadPrinterProfile(selectedPrinter);
-    if (profile) {
-      setLabelSettings(profile as any);
+    // Only apply profile fields that are valid LabelSettings keys; never cast unknown shape wholesale
+    if (profile && typeof profile === 'object') {
+      const safe: Record<string, unknown> = {};
+      const allowed: string[] = [
+        'label_width_mm', 'label_height_mm', 'label_gap_mm', 'label_font_size',
+        'label_show_price', 'label_show_product_name', 'label_show_barcode_text',
+        'label_show_qr', 'label_barcode_type', 'label_default_copies',
+        'label_show_company', 'label_company_name', 'columns', 'rows',
+        'orientation', 'marginTopMm', 'marginLeftMm', 'xOffsetMm', 'yOffsetMm',
+        'barcodeWidthMm', 'barcodeHeightMm', 'barcodeRotate', 'printDpi', 'barcodeModuleWidth',
+      ];
+      for (const k of allowed) {
+        if (k in profile) safe[k] = profile[k];
+      }
+      if (Object.keys(safe).length > 0) {
+        setLabelSettings(safe as Parameters<typeof setLabelSettings>[0]);
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedPrinter]);
