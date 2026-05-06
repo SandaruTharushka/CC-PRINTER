@@ -60,18 +60,17 @@ function productToForm(p: Product): FormState {
 function validate(form: FormState, products: Product[], editTargetId?: string): string | null {
   if (!form.name.trim()) return 'Product name is required';
   if (form.name.trim().length < 2) return 'Product name must be at least 2 characters';
-  if (!form.sku.trim()) return 'SKU is required';
-  if (!form.barcode.trim()) return 'Barcode is required';
-  if (form.barcode_type === 'EAN13' && !/^\d{12,13}$/.test(form.barcode.trim())) {
+  const normalised = form.barcode.trim();
+  if (normalised && form.barcode_type === 'EAN13' && !/^\d{12,13}$/.test(normalised)) {
     return 'EAN13 barcode must be exactly 12 or 13 digits';
   }
   const price = parseFloat(form.price);
-  if (isNaN(price) || price < 0) return 'Price must be a valid number ≥ 0';
+  if (!isNaN(price) && price < 0) return 'Price must be a valid number ≥ 0';
   if (price > 1_000_000) return 'Price value seems unrealistically large';
   const stock = parseInt(form.stock);
-  if (isNaN(stock) || stock < 0) return 'Stock must be a valid number ≥ 0';
+  if (!isNaN(stock) && stock < 0) return 'Stock must be a valid number ≥ 0';
   // Duplicate barcode check (excluding the product being edited)
-  const normalised = form.barcode.trim();
+  if (!normalised) return null;
   const duplicate = products.find(
     p => p.id !== editTargetId && p.barcode.trim() === normalised
   );
@@ -82,7 +81,7 @@ function validate(form: FormState, products: Product[], editTargetId?: string): 
 type ModalMode = 'add' | 'edit' | null;
 
 export default function ItemManagementPanel() {
-  const { products, addProduct, updateProduct, deleteProduct } = useBarcodeStore();
+  const { products, addProduct, updateProduct, deleteProduct, addGeneratedBarcodeToHistory, barcodeExistsAnywhere } = useBarcodeStore();
   const [search, setSearch] = useState('');
   const [modal, setModal] = useState<ModalMode>(null);
   const [editTarget, setEditTarget] = useState<Product | null>(null);
@@ -90,6 +89,7 @@ export default function ItemManagementPanel() {
   const [formError, setFormError] = useState<string | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [generateRandomBarcode, setGenerateRandomBarcode] = useState(false);
 
   const filtered = products.filter(p => {
     const q = search.toLowerCase();
@@ -108,6 +108,7 @@ export default function ItemManagementPanel() {
 
   const openAdd = () => {
     setForm(EMPTY_FORM);
+    setGenerateRandomBarcode(false);
     setFormError(null);
     setEditTarget(null);
     setModal('add');
@@ -115,6 +116,7 @@ export default function ItemManagementPanel() {
 
   const openEdit = (p: Product) => {
     setForm(productToForm(p));
+    setGenerateRandomBarcode(false);
     setFormError(null);
     setEditTarget(p);
     setModal('edit');
@@ -133,7 +135,29 @@ export default function ItemManagementPanel() {
   );
 
   const handleSave = () => {
-    const err = validate(form, products, editTarget?.id);
+    const parsedPrice = parseFloat(form.price);
+    const parsedStock = parseInt(form.stock);
+    const safePrice = isNaN(parsedPrice) || parsedPrice < 0 ? 0 : parsedPrice;
+    const safeStock = isNaN(parsedStock) || parsedStock < 0 ? 0 : parsedStock;
+    let resolvedBarcode = form.barcode.trim();
+
+    if (modal === 'add' && generateRandomBarcode) {
+      let generated: string | null = null;
+      for (let i = 0; i < 20; i += 1) {
+        const candidate = `${Math.floor(Math.random() * 9) + 1}${Math.floor(Math.random() * 1_000_000_000_000).toString().padStart(12, '0')}`;
+        if (!barcodeExistsAnywhere(candidate)) {
+          generated = candidate;
+          break;
+        }
+      }
+      if (!generated) {
+        setFormError('Could not generate a unique barcode after 20 attempts. Please try again.');
+        return;
+      }
+      resolvedBarcode = generated;
+    }
+
+    const err = validate({ ...form, barcode: resolvedBarcode, price: String(safePrice), stock: String(safeStock) }, products, editTarget?.id);
     if (err) { setFormError(err); return; }
 
     if (modal === 'add') {
@@ -141,27 +165,28 @@ export default function ItemManagementPanel() {
         id: generateProductId(products),
         name: form.name.trim(),
         sku: form.sku.trim(),
-        barcode: form.barcode.trim(),
+        barcode: resolvedBarcode,
         barcode_type: form.barcode_type,
-        price: parseFloat(form.price),
+        price: safePrice,
         category: form.category,
-        stock: parseInt(form.stock),
+        stock: safeStock,
         description: form.description.trim() || undefined,
         rackNo: form.rackNo.trim() || undefined,
       };
       const updated = addProductToDB(newProduct);
       addProduct(newProduct);
+      if (newProduct.barcode) addGeneratedBarcodeToHistory(newProduct.barcode);
       void updated;
       flash(`"${newProduct.name}" added successfully`);
     } else if (modal === 'edit' && editTarget) {
       const updates: Partial<Product> = {
         name: form.name.trim(),
         sku: form.sku.trim(),
-        barcode: form.barcode.trim(),
+        barcode: resolvedBarcode,
         barcode_type: form.barcode_type,
-        price: parseFloat(form.price),
+        price: safePrice,
         category: form.category,
-        stock: parseInt(form.stock),
+        stock: safeStock,
         description: form.description.trim() || undefined,
         rackNo: form.rackNo.trim() || undefined,
       };
@@ -335,7 +360,7 @@ export default function ItemManagementPanel() {
                   <Input value={form.name} onChange={v => handleField('name', v)} placeholder="e.g. Engine Oil Filter" />
                 </div>
                 <div>
-                  <Label>SKU *</Label>
+                  <Label>SKU</Label>
                   <Input value={form.sku} onChange={v => handleField('sku', v)} placeholder="e.g. OIL-FLT-001" />
                 </div>
                 <div>
@@ -349,8 +374,23 @@ export default function ItemManagementPanel() {
                   </select>
                 </div>
                 <div>
-                  <Label>Barcode *</Label>
-                  <Input value={form.barcode} onChange={v => handleField('barcode', v)} placeholder="e.g. 8887191411001" />
+                  <Label>Barcode</Label>
+                  <Input
+                    value={form.barcode}
+                    onChange={v => handleField('barcode', v)}
+                    placeholder={modal === 'add' && generateRandomBarcode ? 'Auto generated on save' : 'e.g. 8887191411001'}
+                    disabled={modal === 'add' && generateRandomBarcode}
+                  />
+                  {modal === 'add' && (
+                    <label className="mt-2 flex items-center gap-2 text-sm text-slate-600">
+                      <input
+                        type="checkbox"
+                        checked={generateRandomBarcode}
+                        onChange={e => setGenerateRandomBarcode(e.target.checked)}
+                      />
+                      Generate random barcode
+                    </label>
+                  )}
                 </div>
                 <div>
                   <Label>Barcode Type</Label>
@@ -363,11 +403,11 @@ export default function ItemManagementPanel() {
                   </select>
                 </div>
                 <div>
-                  <Label>Price (LKR) *</Label>
+                  <Label>Price (LKR)</Label>
                   <Input type="number" value={form.price} onChange={v => handleField('price', v)} placeholder="0.00" min="0" step="0.01" />
                 </div>
                 <div>
-                  <Label>Stock Qty *</Label>
+                  <Label>Stock Qty</Label>
                   <Input type="number" value={form.stock} onChange={v => handleField('stock', v)} placeholder="0" min="0" />
                 </div>
                 <div>
