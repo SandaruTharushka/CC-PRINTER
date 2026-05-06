@@ -12,6 +12,10 @@ const PRESET_SIZES: Record<LabelSize, { width: number; height: number; label: st
 };
 
 export default function LabelSettingsPanel() {
+  const MIN_LABEL_WIDTH_MM = 20;
+  const MIN_LABEL_HEIGHT_MM = 10;
+  const MIN_FONT_SIZE_PX = 6;
+  const MIN_BARCODE_MM = 1;
   const { labelSettings, setLabelSettings, settingsSaved, setSettingsSaved, selectedPrinter } = useBarcodeStore();
   const [labelSizeKey, setLabelSizeKey] = useState<LabelSize>('medium');
   const [layoutElement, setLayoutElement] = useState<'productName' | 'encryptedPrice' | 'barcode' | 'barcodeNumber' | 'normalPrice'>('productName');
@@ -140,6 +144,12 @@ export default function LabelSettingsPanel() {
     }
   };
 
+  const toSafePositiveNumber = (raw: string, fallback: number, min: number) => {
+    const parsed = Number(raw);
+    if (!Number.isFinite(parsed)) return Math.max(min, fallback);
+    return Math.max(min, parsed);
+  };
+
   return (
     <div className="flex flex-col gap-5">
       {/* Header */}
@@ -172,14 +182,20 @@ export default function LabelSettingsPanel() {
             type="number"
             value={labelSettings.label_width_mm}
             min={20} max={300}
-            onChange={v => { setLabelSizeKey('custom'); setLabelSettings({ label_width_mm: +v }); }}
+            onChange={v => {
+              setLabelSizeKey('custom');
+              setLabelSettings({ label_width_mm: toSafePositiveNumber(v, labelSettings.label_width_mm, MIN_LABEL_WIDTH_MM) });
+            }}
           />
           <LabelInput
             label="Height (mm)"
             type="number"
             value={labelSettings.label_height_mm}
             min={10} max={300}
-            onChange={v => { setLabelSizeKey('custom'); setLabelSettings({ label_height_mm: +v }); }}
+            onChange={v => {
+              setLabelSizeKey('custom');
+              setLabelSettings({ label_height_mm: toSafePositiveNumber(v, labelSettings.label_height_mm, MIN_LABEL_HEIGHT_MM) });
+            }}
           />
           <LabelInput
             label="Gap (mm)"
@@ -200,14 +216,18 @@ export default function LabelSettingsPanel() {
           </div>
           {(['xMm','yMm','widthMm','heightMm'] as const).map(k => (
             <LabelInput key={k} label={k} type="number" value={(labelSettings.label_template as any)[layoutElement][k]}
-              onChange={v => setLabelSettings({ label_template: { ...labelSettings.label_template, [layoutElement]: { ...(labelSettings.label_template as any)[layoutElement], [k]: +v || 0 } } })} />
+              onChange={v => {
+                const currentValue = (labelSettings.label_template as any)[layoutElement][k] ?? 0;
+                const min = (k === 'widthMm' || k === 'heightMm') ? MIN_BARCODE_MM : 0;
+                setLabelSettings({ label_template: { ...labelSettings.label_template, [layoutElement]: { ...(labelSettings.label_template as any)[layoutElement], [k]: toSafePositiveNumber(v, currentValue, min) } } });
+              }} />
           ))}
           <Toggle label="Show/Hide" checked={(labelSettings.label_template as any)[layoutElement].visible}
             onChange={v => setLabelSettings({ label_template: { ...labelSettings.label_template, [layoutElement]: { ...(labelSettings.label_template as any)[layoutElement], visible: v } } })} />
           {layoutElement !== 'barcode' && (
             <>
               <LabelInput label="Font size" type="number" value={(labelSettings.label_template as any)[layoutElement].fontSizePx ?? 7}
-                onChange={v => setLabelSettings({ label_template: { ...labelSettings.label_template, [layoutElement]: { ...(labelSettings.label_template as any)[layoutElement], fontSizePx: +v || 0 } } })} />
+                onChange={v => setLabelSettings({ label_template: { ...labelSettings.label_template, [layoutElement]: { ...(labelSettings.label_template as any)[layoutElement], fontSizePx: toSafePositiveNumber(v, (labelSettings.label_template as any)[layoutElement].fontSizePx ?? MIN_FONT_SIZE_PX, MIN_FONT_SIZE_PX) } } })} />
               <Toggle label="Bold" checked={Boolean((labelSettings.label_template as any)[layoutElement].bold)}
                 onChange={v => setLabelSettings({ label_template: { ...labelSettings.label_template, [layoutElement]: { ...(labelSettings.label_template as any)[layoutElement], bold: v } } })} />
             </>
@@ -307,9 +327,9 @@ export default function LabelSettingsPanel() {
           <LabelInput label="Move Up/Down (mm)" type="number" value={labelSettings.yOffsetMm}
             onChange={v => setLabelSettings({ yOffsetMm: +v || 0 })} />
           <LabelInput label="Barcode Width (mm)" type="number" value={labelSettings.barcodeWidthMm}
-            onChange={v => setLabelSettings({ barcodeWidthMm: +v || 0 })} />
+            onChange={v => setLabelSettings({ barcodeWidthMm: toSafePositiveNumber(v, labelSettings.barcodeWidthMm || MIN_BARCODE_MM, MIN_BARCODE_MM) })} />
           <LabelInput label="Barcode Height (mm)" type="number" value={labelSettings.barcodeHeightMm}
-            onChange={v => setLabelSettings({ barcodeHeightMm: +v || 0 })} />
+            onChange={v => setLabelSettings({ barcodeHeightMm: toSafePositiveNumber(v, labelSettings.barcodeHeightMm || MIN_BARCODE_MM, MIN_BARCODE_MM) })} />
         </div>
         <div className="grid grid-cols-2 gap-3 mt-3">
           <div>
