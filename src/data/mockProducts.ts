@@ -17,6 +17,7 @@ const DEFAULT_PRODUCTS: Product[] = [
     stock: 150,
     description: 'High performance engine oil filter for standard vehicles',
     rackNo: 'A-12',
+    supplier: 'AutoFlow Distributors',
   },
   {
     id: 'PRD-002',
@@ -29,6 +30,7 @@ const DEFAULT_PRODUCTS: Product[] = [
     stock: 80,
     description: 'Front brake pad set compatible with most sedans',
     rackNo: 'B-04',
+    supplier: 'BrakeTech Imports',
   },
   {
     id: 'PRD-003',
@@ -40,6 +42,7 @@ const DEFAULT_PRODUCTS: Product[] = [
     category: 'Ignition',
     stock: 320,
     description: 'NGK standard spark plug for petrol engines',
+    supplier: 'Ignite Wholesale',
   },
   {
     id: 'PRD-004',
