@@ -5,7 +5,7 @@ import { renderLabelTemplate, renderLabel, printLabels } from '../services/label
 import { generateBarcode } from '../services/barcodeGenerator';
 
 const PRESET_SIZES: Record<LabelSize, { width: number; height: number; label: string }> = {
-  small:  { width: 38,  height: 25,  label: '38×25mm (Small)' },
+  small:  { width: 34,  height: 25,  label: '34×25mm (Small)' },
   medium: { width: 62,  height: 29,  label: '62×29mm (Medium)' },
   large:  { width: 100, height: 50,  label: '100×50mm (Large)' },
   custom: { width: 0,   height: 0,   label: 'Custom' },
@@ -17,7 +17,7 @@ export default function LabelSettingsPanel() {
   const MIN_FONT_SIZE_PX = 6;
   const MIN_BARCODE_MM = 1;
   const { labelSettings, setLabelSettings, settingsSaved, setSettingsSaved, selectedPrinter } = useBarcodeStore();
-  const [labelSizeKey, setLabelSizeKey] = useState<LabelSize>('medium');
+  const [labelSizeKey, setLabelSizeKey] = useState<LabelSize>('small');
   const [layoutElement, setLayoutElement] = useState<'productName' | 'supplier' | 'encryptedPrice' | 'barcode' | 'barcodeNumber' | 'normalPrice'>('productName');
 
   const keyValidation = validatePriceCodeKey(labelSettings.price_code_key);
@@ -59,14 +59,14 @@ export default function LabelSettingsPanel() {
   };
   const resetLayoutSettings = () => {
     setLabelSettings({
-      label_width_mm: 50,
+      label_width_mm: 34,
       label_height_mm: 25,
-      label_gap_mm: 4,
-      columns: 2,
+      label_gap_mm: 1,
+      columns: 3,
       rows: 1,
       label_template: {
         ...DEFAULT_LABEL_TEMPLATE,
-        labelWidthMm: 50,
+        labelWidthMm: 34,
         labelHeightMm: 25,
         priceCodeKey: labelSettings.price_code_key,
       },
@@ -78,8 +78,8 @@ export default function LabelSettingsPanel() {
     setLabelSettings({
       label_barcode_type: 'CODE128',
       barcode_alignment: 'center',
-      barcodeWidthMm: 44,
-      barcodeHeightMm: 10.5,
+      barcodeWidthMm: 30,
+      barcodeHeightMm: 12,
       barcodeRotate: 0,
       label_font_size: 10,
       label_show_barcode_text: true,
@@ -103,7 +103,7 @@ export default function LabelSettingsPanel() {
   };
   const resetToDefaultTemplate = () => {
     setLabelSettings({
-      label_width_mm: 50,
+      label_width_mm: 34,
       label_height_mm: 25,
       show_normal_price: false,
       label_show_price: false,
@@ -121,7 +121,7 @@ export default function LabelSettingsPanel() {
     showResetToast();
   };
   const resetPrintQuality = () => {
-    setLabelSettings({ printDpi: 203, barcodeModuleWidth: 1.2, barcodeHeightMm: 10.5, debugGuides: false });
+    setLabelSettings({ printDpi: 203, barcodeModuleWidth: 1.2, barcodeHeightMm: 12, debugGuides: false });
     setShowGrid(false); setShowBounds(false); setShowSafeArea(false);
     showResetToast();
   };

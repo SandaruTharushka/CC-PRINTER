@@ -81,7 +81,7 @@ export default function PrinterSettingsPanel() {
       xOffsetMm: 0,
       yOffsetMm: 0,
       printDpi: 203,
-      columns: 2,
+      columns: 3,
       rows: 1,
     });
     setSettingsSaved(true);

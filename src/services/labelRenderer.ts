@@ -115,13 +115,19 @@ export async function renderLabel(opts: LabelRenderOptions): Promise<RenderedLab
     color: string
   ) => {
     ctx.fillStyle = color;
-    ctx.font = `${el.bold ? 'bold' : 'normal'} ${el.fontSizePx ?? 8}px Arial, sans-serif`;
-    ctx.textAlign = (el.align ?? 'center') as CanvasTextAlign;
-    ctx.textBaseline = 'middle';
+    let dynamicFontSize = (el.fontSizePx ?? 8) * scale;
     const x = toPxScaled(el.xMm);
     const y = toPxScaled(el.yMm);
     const w = toPxScaled(el.widthMm);
     const h = toPxScaled(el.heightMm);
+    while (dynamicFontSize > 6 * scale) {
+      ctx.font = `${el.bold ? 'bold' : 'normal'} ${dynamicFontSize}px Arial, sans-serif`;
+      if (ctx.measureText(text).width <= w) break;
+      dynamicFontSize -= 0.5;
+    }
+    ctx.font = `${el.bold ? 'bold' : 'normal'} ${dynamicFontSize}px Arial, sans-serif`;
+    ctx.textAlign = (el.align ?? 'center') as CanvasTextAlign;
+    ctx.textBaseline = 'middle';
     const tx = el.align === 'left' ? x : el.align === 'right' ? x + w : x + w / 2;
     ctx.fillText(fitText(text, w), tx, y + h / 2);
   };
@@ -175,6 +181,7 @@ export async function renderLabel(opts: LabelRenderOptions): Promise<RenderedLab
       : barcodeContainerX + (barcodeAreaWidth - drawBarcodeWidth) / 2;
 
   if (barcodeImg) {
+    ctx.imageSmoothingEnabled = false;
     if (rotate === 0) {
       ctx.drawImage(barcodeImg, barcodeX, barcodeY, drawBarcodeWidth, barcodeAreaHeight);
     } else {
@@ -318,7 +325,10 @@ export async function printLabels(
 
   const sheetColumns = Math.max(1, settings.columns);
   const sheetRows = Math.max(1, settings.rows);
-  const gapMm = settings.label_gap_mm ?? 0;
+  const requestedGapMm = settings.label_gap_mm ?? 0;
+  const maxPrintableWidthMm = 104;
+  const maxGapToFit = sheetColumns > 1 ? Math.max(0, (maxPrintableWidthMm - orientationWidth * sheetColumns) / (sheetColumns - 1)) : requestedGapMm;
+  const gapMm = Math.min(requestedGapMm, maxGapToFit);
   const sheetWidth = orientationWidth * sheetColumns + gapMm * (sheetColumns - 1);
   const sheetHeight = orientationHeight * sheetRows + gapMm * (sheetRows - 1);
   const marginTop = (settings.marginTopMm ?? 0) + (settings.yOffsetMm ?? 0);
